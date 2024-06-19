@@ -1,51 +1,47 @@
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Savepoint;
 
+@Slf4j
 public class DatabaseService {
 
     @Transactional(rollbackFor = Exception.class)
-    public String createCheckpointAndUpdate(JdbcTemplate jdbcTemplate, String query, Object[] params) throws SQLException {
+    public String createCheckpointAndUpdate(JdbcTemplate jdbcTemplate, PreparedStatementCreator psc, int maxRows) throws SQLException {
         return jdbcTemplate.execute((Connection con) -> {
-            Savepoint savepoint = null;
-            String savepointName = null;
-            try {
-                con.setAutoCommit(false); // Disable auto-commit
-                savepoint = con.setSavepoint(); // Create a savepoint
-                savepointName = savepoint.getSavepointName(); // Get the savepoint name
+            Savepoint savepoint = con.setSavepoint("SP_" + System.currentTimeMillis()); // Unique savepoint name
 
-                // Prepare the statement for batch execution
-                PreparedStatement ps = con.prepareStatement(query);
-                for (Object param : params) {
-                    ps.setObject(1, param);
-                    ps.addBatch();
-                }
+            try (PreparedStatement ps = psc.createPreparedStatement(con)) {
+                con.setAutoCommit(false);
 
-                // Execute batch update
                 int[] updateCounts = ps.executeBatch();
 
-                // Check if more than 10 rows are updated
-                if (updateCounts.length > 10) {
-                    throw new SQLException("Attempted to update more than 10 rows, rolling back transaction.");
+                // Check if update count exceeds the maximum allowed rows
+                if (updateCounts.length > maxRows) {
+                    throw new SQLException("Update limit exceeded.");
                 }
 
-                // Commit the transaction if the update is successful
                 con.commit();
-            } catch (SQLException e) {
-                // If there's an error, roll back to the savepoint
-                if (savepoint != null) {
-                    con.rollback(savepoint);
-                }
-                throw e; // Rethrow the exception to handle it as needed
+            } catch (DataIntegrityViolationException e) {
+                // Handle specific data integrity violations
+                log.error("Data integrity violation: {}", e.getMessage(), e);
+                throw e;
             } finally {
-                if (con != null) {
-                    con.setAutoCommit(true); // Restore auto-commit mode
-                }
+                con.setAutoCommit(true);
             }
-            return savepointName; // Return the savepoint name for future reference
-        });
+            return savepoint.getName();
+        });
+    }
+
+    // Additional method to validate input data before processing
+    public boolean validateInputData(YourDataType data) {
+        // Implement validation logic here
+        // Return true if data is valid, false otherwise
     }
 }
