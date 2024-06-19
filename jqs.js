@@ -1,12 +1,8 @@
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Savepoint;
+import org.springframework.jdbc.core.PreparedStatementCreator;
 
 @Slf4j
 public class DatabaseService {
@@ -18,35 +14,26 @@ public class DatabaseService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public String createCheckpointAndUpdate(PreparedStatementCreator psc, int maxRows) throws SQLException {
-        return namedParameterJdbcTemplate.getJdbcOperations().execute((Connection con) -> {
-            Savepoint savepoint = null;
-            try {
-                con.setAutoCommit(false); // Turn off auto-commit
-                savepoint = con.setSavepoint("SP_" + System.currentTimeMillis());
+    public int createCheckpointAndUpdate(PreparedStatementCreator psc, int maxRows) {
+        try {
+            int updateCount = namedParameterJdbcTemplate.getJdbcOperations().update(psc);
 
-                try (PreparedStatement ps = psc.createPreparedStatement(con)) {
-                    int[] updateCounts = ps.executeBatch();
-
-                    if (updateCounts.length > maxRows) {
-                        throw new SQLException("Update limit exceeded.");
-                    }
-
-                    con.commit(); // Commit the transaction
-                } catch (SQLException e) {
-                    log.error("SQLException occurred: {}", e.getMessage(), e);
-                    if (savepoint != null) {
-                        con.rollback(savepoint); // Rollback to the savepoint
-                    }
-                    throw e;
-                } finally {
-                    con.setAutoCommit(true); // Reset auto-commit to true
-                }
-                return savepoint.getSavepointName();
-            } catch (SQLException e) {
-                log.error("Error setting auto-commit to false: {}", e.getMessage(), e);
-                throw e;
+            if (updateCount > maxRows) {
+                // Exceeding maxRows is an exceptional condition, handle accordingly
+                log.error("Update limit of {} exceeded with {} updates.", maxRows, updateCount);
+                // Manually trigger a rollback by throwing a runtime exception
+                throw new RuntimeException("Update limit exceeded.");
             }
-        });
-    }
+
+            return updateCount;
+        } catch (DataAccessException e) {
+            // Log the exception details and rethrow it to trigger transaction rollback
+            log.error("DataAccessException occurred during update: {}", e.getMessage(), e);
+            throw e;
+        } catch (Exception e) {
+            // Log unexpected exceptions and rethrow as a runtime exception to trigger rollback
+            log.error("Unexpected exception occurred during update: {}", e.getMessage(), e);
+            throw new RuntimeException(e);
+        }
+    }
 }
