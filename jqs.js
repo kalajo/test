@@ -1,46 +1,51 @@
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Savepoint;
 
-public class YourApplication {
+public class DatabaseService {
 
-    public void updateQueryResult(HashMap<String, Object> paramMap, QueryResult queryResult) {
-        // Convert all headers to lower case and store in a HashSet for quick lookup
-        Set<String> lowerCaseHeaders = queryResult.getHeaders().stream()
-                .map(String::toLowerCase)
-                .collect(Collectors.toSet());
+    @Transactional(rollbackFor = Exception.class)
+    public String createCheckpointAndUpdate(JdbcTemplate jdbcTemplate, String query, Object[] params) throws SQLException {
+        return jdbcTemplate.execute((Connection con) -> {
+            Savepoint savepoint = null;
+            String savepointName = null;
+            try {
+                con.setAutoCommit(false); // Disable auto-commit
+                savepoint = con.setSavepoint(); // Create a savepoint
+                savepointName = savepoint.getSavepointName(); // Get the savepoint name
 
-        // Convert paramMap keys to lower case and store in a HashSet
-        Set<String> lowerCaseParamKeys = paramMap.keySet().stream()
-                .map(String::toLowerCase)
-                .collect(Collectors.toSet());
+                // Prepare the statement for batch execution
+                PreparedStatement ps = con.prepareStatement(query);
+                for (Object param : params) {
+                    ps.setObject(1, param);
+                    ps.addBatch();
+                }
 
-        // Find the intersection of headers and param keys
-        lowerCaseParamKeys.retainAll(lowerCaseHeaders);
+                // Execute batch update
+                int[] updateCounts = ps.executeBatch();
 
-        // If no matching headers, no need to proceed further
-        if (lowerCaseParamKeys.isEmpty()) {
-            return;
-        }
+                // Check if more than 10 rows are updated
+                if (updateCounts.length > 10) {
+                    throw new SQLException("Attempted to update more than 10 rows, rolling back transaction.");
+                }
 
-        // Create a map of header to index for quick access
-        Map<String, Integer> headerIndexMap = IntStream.range(0, queryResult.getHeaders().size())
-                .boxed()
-                .collect(Collectors.toMap(i -> queryResult.getHeaders().get(i).toLowerCase(), i -> i));
-
-        // Use parallelStream for processing large data sets
-        queryResult.getData().parallelStream().forEach(resultDataRow -> {
-            List<String> elements = resultDataRow.getElement();
-            lowerCaseParamKeys.forEach(key -> {
-                int index = headerIndexMap.get(key);
-                String originalValue = elements.get(index);
-                elements.set(index, originalValue + "_changed");
-            });
-        });
-    }
+                // Commit the transaction if the update is successful
+                con.commit();
+            } catch (SQLException e) {
+                // If there's an error, roll back to the savepoint
+                if (savepoint != null) {
+                    con.rollback(savepoint);
+                }
+                throw e; // Rethrow the exception to handle it as needed
+            } finally {
+                if (con != null) {
+                    con.setAutoCommit(true); // Restore auto-commit mode
+                }
+            }
+            return savepointName; // Return the savepoint name for future reference
+        });
+    }
 }
-
-// QueryResult and ResultDataRow classes remain the same
