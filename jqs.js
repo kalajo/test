@@ -1,45 +1,52 @@
 import lombok.extern.slf4j.Slf4j;
-import lombok.SneakyThrows;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Savepoint;
 
 @Slf4j
 public class DatabaseService {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
-    public DatabaseService(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public DatabaseService(NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
+        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
     @Transactional(rollbackFor = Exception.class)
-    @SneakyThrows // This annotation will allow you to throw checked exceptions without declaring them
-    public String createCheckpointAndUpdate(PreparedStatementCreator psc, int maxRows) {
-        return jdbcTemplate.execute(psc, (PreparedStatement ps) -> {
+    public String createCheckpointAndUpdate(PreparedStatementCreator psc, int maxRows) throws SQLException {
+        return namedParameterJdbcTemplate.getJdbcOperations().execute((Connection con) -> {
             Savepoint savepoint = null;
             try {
-                Connection con = ps.getConnection();
-                con.setAutoCommit(false);
+                con.setAutoCommit(false); // Turn off auto-commit
                 savepoint = con.setSavepoint("SP_" + System.currentTimeMillis());
 
-                int[] updateCounts = ps.executeBatch();
+                try (PreparedStatement ps = psc.createPreparedStatement(con)) {
+                    int[] updateCounts = ps.executeBatch();
 
-                if (updateCounts.length > maxRows) {
-                    throw new SQLException("Update limit exceeded.");
+                    if (updateCounts.length > maxRows) {
+                        throw new SQLException("Update limit exceeded.");
+                    }
+
+                    con.commit(); // Commit the transaction
+                } catch (SQLException e) {
+                    log.error("SQLException occurred: {}", e.getMessage(), e);
+                    if (savepoint != null) {
+                        con.rollback(savepoint); // Rollback to the savepoint
+                    }
+                    throw e;
+                } finally {
+                    con.setAutoCommit(true); // Reset auto-commit to true
                 }
-
-                con.commit();
                 return savepoint.getSavepointName();
             } catch (SQLException e) {
-                log.error("SQLException occurred: {}", e.getMessage(), e);
-                if (savepoint != null) {
-                    ps.getConnection().rollback(savepoint);
-                }
+                log.error("Error setting auto-commit to false: {}", e.getMessage(), e);
                 throw e;
-            } finally {
-                ps.getConnection
+            }
+        });
+    }
+}
