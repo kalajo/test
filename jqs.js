@@ -1,11 +1,11 @@
 import lombok.extern.slf4j.Slf4j;
+import lombok.SneakyThrows;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.sql.Savepoint;
 
 @Slf4j
@@ -18,7 +18,8 @@ public class DatabaseService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public String createCheckpointAndUpdate(PreparedStatementCreator psc, int maxRows) throws SQLException {
+    @SneakyThrows // This annotation will allow you to throw checked exceptions without declaring them
+    public String createCheckpointAndUpdate(PreparedStatementCreator psc, int maxRows) {
         return jdbcTemplate.execute((Connection con) -> {
             Savepoint savepoint = con.setSavepoint("SP_" + System.currentTimeMillis());
             try (PreparedStatement ps = psc.createPreparedStatement(con)) {
@@ -31,18 +32,10 @@ public class DatabaseService {
                 }
 
                 con.commit();
-            } catch (SQLException e) {
-                log.error("SQLException occurred: {}", e.getMessage(), e);
-                if (savepoint != null) {
-                    con.rollback(savepoint);
-                }
-                throw e;
             } finally {
-                if (con != null) {
-                    con.setAutoCommit(true);
-                }
+                con.setAutoCommit(true);
             }
             return savepoint.getSavepointName();
-        });
-    }
+});
+}
 }
