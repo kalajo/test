@@ -1,0 +1,123 @@
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Savepoint;
+
+@Slf4j
+public class DatabaseService {
+
+    @Transactional(rollbackFor = Exception.class)
+    public String createCheckpointAndUpdate(JdbcTemplate jdbcTemplate, PreparedStatementCreator psc, int maxRows) throws SQLException {
+        return jdbcTemplate.execute((Connection con) -> {
+            Savepoint savepoint = null;
+            String savepointName = null;
+            try {
+                con.setAutoCommit(false); // Disable auto-commit
+                savepoint = con.setSavepoint(); // Create a savepoint
+                savepointName = savepoint.getSavepointName(); // Get the savepoint name
+
+                // Use the PreparedStatementCreator to create the PreparedStatement
+                try (PreparedStatement ps = psc.createPreparedStatement(con)) {
+                    int[] updateCounts = ps.executeBatch();
+
+                    // Check if more than maxRows are updated
+                    if (updateCounts.length > maxRows) {
+                        throw new SQLException("Update limit exceeded, rolling back transaction.");
+                    }
+
+                    // Commit the transaction if the update is successful
+                    con.commit();
+                }
+
+            } catch (SQLException e) {
+                log.error("Transaction failed, rolling back to savepoint.", e);
+                // If there's an error, roll back to the savepoint
+                if (savepoint != null) {
+                    con.rollback(savepoint);
+                }
+                throw e; // Rethrow the exception to handle it as needed
+            } finally {
+                if (con != null) {
+                    con.setAutoCommit(true); // Restore auto-commit mode
+                }
+            }
+            log.info("Transaction completed successfully, savepoint: {}", savepointName);
+            return savepointName; // Return the savepoint name for future reference
+        });
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Savepoint;
+
+@Slf4j
+public class DatabaseService {
+
+    @Transactional(rollbackFor = Exception.class)
+    public String createCheckpointAndUpdate(JdbcTemplate namedJdbcTemplate, PreparedStatementCreator psc, int maxRows, Object... params) throws SQLException {
+        return namedJdbcTemplate.execute((Connection con) -> {
+            Savepoint savepoint = null;
+            String savepointName = null;
+            try {
+                con.setAutoCommit(false); // Disable auto-commit
+                savepoint = con.setSavepoint(); // Create a savepoint
+                savepointName = savepoint.getSavepointName(); // Get the savepoint name
+
+                // Use the PreparedStatementCreator to create the PreparedStatement
+                try (PreparedStatement ps = psc.createPreparedStatement(con)) {
+                    // Set parameters to the PreparedStatement
+                    for (int i = 0; i < params.length; i++) {
+                        ps.setObject(i + 1, params[i]);
+                    }
+                    int[] updateCounts = ps.executeBatch();
+
+                    // Check if more than maxRows are updated
+                    if (updateCounts.length > maxRows) {
+                        throw new SQLException("Update limit exceeded, rolling back transaction.");
+                    }
+
+                    // Commit the transaction if the update is successful
+                    con.commit();
+                }
+
+            } catch (SQLException e) {
+                log.error("Transaction failed, rolling back to savepoint.", e);
+                // If there's an error, roll back to the savepoint
+                if (savepoint != null) {
+                    con.rollback(savepoint);
+                }
+                throw e; // Rethrow the exception to handle it as needed
+            } finally {
+                if (con != null) {
+                    con.setAutoCommit(true); // Restore auto-commit mode
+                }
+            }
+            log.info("Transaction completed successfully, savepoint: {}", savepointName);
+            return savepointName; // Return the savepoint name for future reference
+        });
+    }
+}
