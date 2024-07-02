@@ -72,15 +72,15 @@ import java.sql.Savepoint;
 @Slf4j
 public class DatabaseService {
 
-    @Transactional(rollbackFor = Exception.class)
+      @Transactional(rollbackFor = Exception.class)
     public String createCheckpointAndUpdate(NamedParameterJdbcTemplate namedJdbcTemplate, PreparedStatementCreator psc, int maxRows) throws SQLException {
         return namedJdbcTemplate.getJdbcTemplate().execute((Connection con) -> {
             Savepoint savepoint = null;
             String savepointName = null;
             try {
                 con.setAutoCommit(false); // Disable auto-commit
-                savepoint = con.setSavepoint(); // Create a savepoint
-                savepointName = savepoint.getSavepointName(); // Get the savepoint name
+                savepoint = con.setSavepoint("SAVEPOINT_NAME"); // Create a named savepoint
+                savepointName = "SAVEPOINT_NAME"; // Use the same name for reference
 
                 // Use the PreparedStatementCreator to create the PreparedStatement
                 try (PreparedStatement ps = psc.createPreparedStatement(con)) {
@@ -109,6 +109,7 @@ public class DatabaseService {
             }
             log.info("Transaction completed successfully, savepoint: {}", savepointName);
             return savepointName; // Return the savepoint name for future reference
+
         });
     }
 }
