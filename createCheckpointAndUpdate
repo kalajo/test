@@ -61,7 +61,6 @@ public class DatabaseService {
 
 
 
-
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.transaction.annotation.Transactional;
@@ -110,9 +109,10 @@ public class DatabaseService {
                 }
             }
             log.info("Transaction completed successfully, savepoint: {}", savepointName);
-            return savepointName; // Return the savepoint name for future reference
-        });
-    }
+            return savepointName; // Return the savepoint
+
+        });
+    }
 }
 
 
