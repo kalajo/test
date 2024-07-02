@@ -64,9 +64,8 @@ public class DatabaseService {
 
 
 
-
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import java.sql.Connection;
@@ -78,8 +77,8 @@ import java.sql.Savepoint;
 public class DatabaseService {
 
     @Transactional(rollbackFor = Exception.class)
-    public String createCheckpointAndUpdate(JdbcTemplate namedJdbcTemplate, PreparedStatementCreator psc, int maxRows, Object... params) throws SQLException {
-        return namedJdbcTemplate.execute((Connection con) -> {
+    public String createCheckpointAndUpdate(NamedParameterJdbcTemplate namedJdbcTemplate, String sql, MapSqlParameterSource params, int maxRows) throws SQLException {
+        return namedJdbcTemplate.getJdbcTemplate().execute((Connection con) -> {
             Savepoint savepoint = null;
             String savepointName = null;
             try {
@@ -87,11 +86,11 @@ public class DatabaseService {
                 savepoint = con.setSavepoint(); // Create a savepoint
                 savepointName = savepoint.getSavepointName(); // Get the savepoint name
 
-                // Use the PreparedStatementCreator to create the PreparedStatement
-                try (PreparedStatement ps = psc.createPreparedStatement(con)) {
+                // Use the NamedParameterJdbcTemplate to create the PreparedStatement
+                try (PreparedStatement ps = con.prepareStatement(sql)) {
                     // Set parameters to the PreparedStatement
-                    for (int i = 0; i < params.length; i++) {
-                        ps.setObject(i + 1, params[i]);
+                    for (String paramName : params.getParameterNames()) {
+                        ps.setObject(params.getParameterIndex(paramName), params.getValue(paramName));
                     }
                     int[] updateCounts = ps.executeBatch();
 
@@ -121,3 +120,4 @@ public class DatabaseService {
         });
     }
 }
+
