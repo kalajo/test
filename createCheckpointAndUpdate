@@ -77,6 +77,7 @@ public class DatabaseService {
         return namedJdbcTemplate.getJdbcTemplate().execute((Connection con) -> {
             Savepoint savepoint = null;
             String savepointName = null;
+            boolean originalAutoCommit = con.getAutoCommit();
             try {
                 con.setAutoCommit(false); // Disable auto-commit
                 savepoint = con.setSavepoint("SAVEPOINT_NAME"); // Create a named savepoint
@@ -85,10 +86,7 @@ public class DatabaseService {
                 // Use the PreparedStatementCreator to create the PreparedStatement
                 try (PreparedStatement ps = psc.createPreparedStatement(con)) {
                     log.info("Executing batch update with SQL: {}", ps.toString());
-
-                    // Convert the PreparedStatement to a batch update
-                    String[] sqlStatements = {/* Add your SQL statements here */};
-                    int[] updateCounts = namedJdbcTemplate.getJdbcTemplate().batchUpdate(sqlStatements);
+                    int[] updateCounts = ps.executeBatch();
 
                     // Log the update counts
                     log.info("Update counts: {}", updateCounts);
@@ -111,7 +109,7 @@ public class DatabaseService {
                 throw e; // Rethrow the exception to handle it as needed
             } finally {
                 if (con != null) {
-                    con.setAutoCommit(true); // Restore auto-commit mode
+                    con.setAutoCommit(originalAutoCommit); // Restore original auto-commit mode
                 }
             }
             log.info("Transaction completed successfully, savepoint: {}", savepointName);
