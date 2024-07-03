@@ -72,7 +72,7 @@ import java.sql.Savepoint;
 @Slf4j
 public class DatabaseService {
 
-    @Transactional(rollbackFor = Exception.class)
+  @Transactional(rollbackFor = Exception.class)
     public String createCheckpointAndUpdate(NamedParameterJdbcTemplate namedJdbcTemplate, PreparedStatementCreator psc, int maxRows) throws SQLException {
         return namedJdbcTemplate.getJdbcTemplate().execute((Connection con) -> {
             Savepoint savepoint = null;
@@ -85,14 +85,14 @@ public class DatabaseService {
 
                 // Use the PreparedStatementCreator to create the PreparedStatement
                 try (PreparedStatement ps = psc.createPreparedStatement(con)) {
-                    log.info("Executing batch update with SQL: {}", ps.toString());
-                    int[] updateCounts = ps.executeBatch();
+                    log.info("Executing update with SQL: {}", ps.toString());
+                    int updateCount = ps.executeUpdate();
 
-                    // Log the update counts
-                    log.info("Update counts: {}", updateCounts);
+                    // Log the update count
+                    log.info("Update count: {}", updateCount);
 
                     // Check if more than maxRows are updated
-                    if (updateCounts.length > maxRows) {
+                    if (updateCount > maxRows) {
                         throw new SQLException("Update limit exceeded, rolling back transaction.");
                     }
 
@@ -114,6 +114,7 @@ public class DatabaseService {
             }
             log.info("Transaction completed successfully, savepoint: {}", savepointName);
             return savepointName; // Return the savepoint name for future reference
+
 
 
         });
