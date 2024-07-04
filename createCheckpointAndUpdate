@@ -72,16 +72,15 @@ import java.sql.Savepoint;
 @Slf4j
 public class DatabaseService {
 
-  @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class)
     public String createCheckpointAndUpdate(NamedParameterJdbcTemplate namedJdbcTemplate, PreparedStatementCreator psc, int maxRows) throws SQLException {
         return namedJdbcTemplate.getJdbcTemplate().execute((Connection con) -> {
             Savepoint savepoint = null;
-            String savepointName = null;
+            String savepointName = UUID.randomUUID().toString(); // Generate a random checkpoint name
             boolean originalAutoCommit = con.getAutoCommit();
             try {
                 con.setAutoCommit(false); // Disable auto-commit
-                savepoint = con.setSavepoint("SAVEPOINT_NAME"); // Create a named savepoint
-                savepointName = "SAVEPOINT_NAME"; // Use the same name for reference
+                savepoint = con.setSavepoint(savepointName); // Create a named savepoint
 
                 // Use the PreparedStatementCreator to create the PreparedStatement
                 try (PreparedStatement ps = psc.createPreparedStatement(con)) {
