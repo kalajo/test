@@ -5,26 +5,74 @@ import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api")
-public class QueryController {
+public class AuthController {
 
-    private static final Logger logger = LoggerFactory.getLogger(QueryController.class);
-    private final QueryService queryService;
+    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
+    private final AuthenticationService authenticationService;
+    private final DataSourceRouting dataSourceRouting;
 
-    public QueryController(QueryService queryService) {
-        this.queryService = queryService;
+    public AuthController(AuthenticationService authenticationService, DataSourceRouting dataSourceRouting) {
+        this.authenticationService = authenticationService;
+        this.dataSourceRouting = dataSourceRouting;
     }
 
-    @GetMapping(path = "/getQueryById", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(path = "/login", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
-    public ResponseEntity<?> getQueryById(@RequestParam("queryId") Long queryId) {
-        // Sanitize the input
-        if (queryId == null || queryId < 0) {
-            return new ResponseEntity<>("Invalid queryId", HttpStatus.BAD_REQUEST);
+    public ResponseEntity<?> login(@RequestBody User user) {
+        try {
+            // Validate and sanitize user input
+            String selectedEnv = user.getSelectedEnv();
+            if (selectedEnv == null || !isValidEnv(selectedEnv)) {
+                return new ResponseEntity<>("Invalid environment selected", HttpStatus.BAD_REQUEST);
+            }
+
+            if (dataSourceRouting.getDataSourceMapForEnv(selectedEnv)) {
+                return authenticationService.authenticateUser(sanitizeUser(user));
+            } else {
+                return new ResponseEntity<>("Environment not found", HttpStatus.NOT_FOUND);
+            }
+        } catch (Exception e) {
+            logger.error("Error during login", e);
+            return new ResponseEntity<>("Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
 
-        logger.info("/getQueryById: {}", queryId);
+    private boolean isValidEnv(String env) {
+        // Add your validation logic here, e.g., allow only specific environment names
+        return env.matches("^[a-zA-Z0-9_-]+$");
+    }
 
-        List<Query> queriesList = this.queryService.getQueryById(queryId);
-        return new ResponseEntity<>(queriesList, HttpStatus.OK);
+    private User sanitizeUser(User user) {
+        // Sanitize user input to prevent LDAP injection
+        user.setUsername(escapeLDAPSearchFilter(user.getUsername()));
+        user.setPassword(escapeLDAPSearchFilter(user.getPassword()));
+        return user;
+    }
+
+    private String escapeLDAPSearchFilter(String input) {
+        // Escape special characters in LDAP search filter
+        StringBuilder sb = new StringBuilder();
+        for (char c : input.toCharArray()) {
+            switch (c) {
+                case '\\':
+                    sb.append("\\5c");
+                    break;
+                case '*':
+                    sb.append("\\2a");
+                    break;
+                case '(':
+                    sb.append("\\28");
+                    break;
+                case ')':
+                    sb.append("\\29");
+                    break;
+                case '\u0000':
+                    sb.append("\\00");
+                    break;
+                default:
+                    sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 }
