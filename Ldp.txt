@@ -16,6 +16,7 @@ public class QueryController {
                     formatTypes[i] = FormatType.TEXT;
                 }
 
+                // Ensure safe instantiation of QueryResultToExcel
                 QueryResultToExcel resultToExcel = new QueryResultToExcel(queryResult, formatTypes, "Results");
                 resultToExcel.generate(out);
             } catch (final Exception e) {
