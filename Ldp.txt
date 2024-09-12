@@ -1,65 +1,32 @@
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import java.io.OutputStream;
 
 @RestController
-@CrossOrigin(maxAge = 3600)
-public class LoginController {
+@RequestMapping("/api")
+public class QueryController {
 
-    private static final Logger logger = LoggerFactory.getLogger(LoginController.class);
-    private final EnvRoutingDatasource dataSourceRouting = EnvRoutingDatasource.getInstance();
+    @PostMapping(path = "/export", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public ResponseEntity<StreamingResponseBody> exportQueryResults(@RequestBody QueryResult queryResult) {
+        StreamingResponseBody stream = out -> {
+            try {
+                FormatType[] formatTypes = new FormatType[queryResult.getColumnClass().size()];
+                for (int i = 0; i < queryResult.getColumnClass().size(); i++) {
+                    formatTypes[i] = FormatType.TEXT;
+                }
 
-    @Autowired
-    private AuthenticationService authenticationService;
-
-    @PostMapping(path = "/api/login", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> login(@RequestBody User user) {
-        try {
-            if (dataSourceRouting.getDataSourceMapForEnv(user.getSelectedEnv())) {
-                // Sanitize user input before passing to authenticationService
-                User sanitizedUser = sanitizeUser(user);
-                return authenticationService.authenticateUser(sanitizedUser);
-            } else {
-                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("Selected DB not available");
+                QueryResultToExcel resultToExcel = new QueryResultToExcel(queryResult, formatTypes, "Results");
+                resultToExcel.generate(out);
+            } catch (final Exception e) {
+                e.printStackTrace();
             }
-        } catch (SQLException ex) {
-            logger.error("Error during login", ex);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Selected DB not available");
-        }
-    }
+        };
 
-    private User sanitizeUser(User user) {
-        // Sanitize user input to prevent LDAP injection
-        user.setUsername(escapeLDAPSearchFilter(user.getUsername()));
-        user.setPassword(escapeLDAPSearchFilter(user.getPassword()));
-        return user;
-    }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentDispositionFormData("attachment", "results.xlsx");
+        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
 
-    private String escapeLDAPSearchFilter(String input) {
-        // Escape special characters in LDAP search filter
-        StringBuilder sb = new StringBuilder();
-        for (char c : input.toCharArray()) {
-            switch (c) {
-                case '\\':
-                    sb.append("\\5c");
-                    break;
-                case '*':
-                    sb.append("\\2a");
-                    break;
-                case '(':
-                    sb.append("\\28");
-                    break;
-                case ')':
-                    sb.append("\\29");
-                    break;
-                case '\u0000':
-                    sb.append("\\00");
-                    break;
-                default:
-                    sb.append(c);
-            }
-        }
-        return sb.toString();
+        return new ResponseEntity<>(stream, headers, HttpStatus.OK);
     }
 }
