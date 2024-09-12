@@ -17,7 +17,9 @@ public class LoginController {
     public ResponseEntity<?> login(@RequestBody User user) {
         try {
             if (dataSourceRouting.getDataSourceMapForEnv(user.getSelectedEnv())) {
-                return authenticationService.authenticateUser(sanitizeUser(user));
+                // Sanitize user input before passing to authenticationService
+                User sanitizedUser = sanitizeUser(user);
+                return authenticationService.authenticateUser(sanitizedUser);
             } else {
                 return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("Selected DB not available");
             }
