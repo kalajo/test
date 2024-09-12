@@ -16,13 +16,7 @@ public class LoginController {
     @PostMapping(path = "/api/login", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> login(@RequestBody User user) {
         try {
-            // Validate and sanitize user input
-            String selectedEnv = user.getSelectedEnv();
-            if (selectedEnv == null || !isValidEnv(selectedEnv)) {
-                return new ResponseEntity<>("Invalid environment selected", HttpStatus.BAD_REQUEST);
-            }
-
-            if (dataSourceRouting.getDataSourceMapForEnv(selectedEnv)) {
+            if (dataSourceRouting.getDataSourceMapForEnv(user.getSelectedEnv())) {
                 return authenticationService.authenticateUser(sanitizeUser(user));
             } else {
                 return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("Selected DB not available");
@@ -31,11 +25,6 @@ public class LoginController {
             logger.error("Error during login", ex);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Selected DB not available");
         }
-    }
-
-    private boolean isValidEnv(String env) {
-        // Add your validation logic here, e.g., allow only specific environment names
-        return env.matches("^[a-zA-Z0-9_-]+$");
     }
 
     private User sanitizeUser(User user) {
