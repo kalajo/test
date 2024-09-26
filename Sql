@@ -1,8 +1,12 @@
-SELECT EXTRACTVALUE(
-         t.xml_column,
-         '/tns:DetermineContractIssuanceRequest/tns:Participant/participant:Institution/institution:Name',
-         'xmlns:tns="http://rules.tiaa.org/brms-contract-issuance-v1.0/types"
-          xmlns:participant="http://cbl.tiaa.org/participant/v1"
-          xmlns:institution="http://cbl.tiaa.org/institution/v1"'
-       ) AS institution_name
-FROM your_table t;
+SELECT x.inst_name
+FROM your_table t,
+     XMLTABLE(
+       XMLNAMESPACES(
+           'http://rules.tiaa.org/brms-contract-issuance-v1.0/types' AS "tns",
+           'http://cbl.tiaa.org/institution/v1' AS "institution",
+           'http://cbl.tiaa.org/participant/v1' AS "participant"
+       ),
+       '/tns:DetermineContractIssuanceRequest/tns:Participant/participant:Institution'
+       PASSING t.xml_column
+       COLUMNS inst_name VARCHAR2(100) PATH 'institution:Name'
+     ) x;
