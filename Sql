@@ -1,14 +1,8 @@
-SELECT x.Id
-FROM your_table,
-     XMLTABLE(
-        XMLNAMESPACES(
-          'http://cbl.tiaa.org/document/vi' AS "ns13",
-          'http://cbl.tian.org/documenttvpenumber/vi' AS "ns14",
-          'http://cbl.tlaa.org/electronicdocumentlibrary/v1' AS "ns15"
-        ),
-        '/ns2:DetermineContractIssuanceResponse/ns2:Documents/ns13:Document/ns13:DocumentTypeNumber/ns14:ElectronicDocumentLibrary/ns15:Id'
-        PASSING XMLTYPE(xml_clob_column)
-        COLUMNS
-          Id VARCHAR2(50) PATH '.'
-     ) x
-WHERE x.Id = 'CRFST2';
+SELECT EXTRACTVALUE(
+         t.xml_column,
+         '/tns:DetermineContractIssuanceRequest/tns:Participant/participant:Institution/institution:Name',
+         'xmlns:tns="http://rules.tiaa.org/brms-contract-issuance-v1.0/types"
+          xmlns:participant="http://cbl.tiaa.org/participant/v1"
+          xmlns:institution="http://cbl.tiaa.org/institution/v1"'
+       ) AS institution_name
+FROM your_table t;
