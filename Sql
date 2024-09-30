@@ -1,12 +1,18 @@
-SELECT x.inst_name
-FROM your_table t,
-     XMLTABLE(
-       XMLNAMESPACES(
-           'http://rules.tiaa.org/brms-contract-issuance-v1.0/types' AS "tns",
-           'http://cbl.tiaa.org/institution/v1' AS "institution",
-           'http://cbl.tiaa.org/participant/v1' AS "participant"
-       ),
-       '/tns:DetermineContractIssuanceRequest/tns:Participant/participant:Institution'
-       PASSING t.xml_column
-       COLUMNS inst_name VARCHAR2(100) PATH 'institution:Name'
-     ) x;
+# 1. Increase server connection timeout (to handle slow requests)
+server.connection-timeout=60s  # Adjust to suit your needs (e.g., 120s)
+
+# 2. Increase maximum file size and request size (even if you're not uploading files, large payloads could cause issues)
+spring.servlet.multipart.max-file-size=10MB
+spring.servlet.multipart.max-request-size=10MB
+
+# 3. HTTP keep-alive settings (to prevent premature connection closure)
+server.http2.enabled=true
+server.tomcat.max-threads=200
+
+# 4. Enable CORS (if the issue might be related to cross-origin resource sharing)
+# Add specific origin if needed, or use "*" for all origins (not recommended for production)
+spring.mvc.cors.allowed-origins=*
+spring.mvc.cors.allowed-methods=GET,POST,PUT,DELETE,OPTIONS
+spring.mvc.cors.allowed-headers=Authorization,Content-Type
+spring.mvc.cors.allow-credentials=true
+spring.mvc.cors.max-age=3600
