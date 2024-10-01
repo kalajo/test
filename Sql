@@ -18,14 +18,28 @@ spring.mvc.cors.allow-credentials=true
 spring.mvc.cors.max-age=3600
 
 
-for (int i = 0; i < queryResult.getColumnClass().size(); i++) {
-    Object columnClass = queryResult.getColumnClass().get(i);  // Get the class object
+public boolean processQueryResult(QueryResult queryResult) {
+    List<Object> columnClasses = queryResult.getColumnClass(); // Get the column classes from queryResult
+    FormatType[] formatTypes = new FormatType[columnClasses.size()]; // Initialize formatTypes array
 
-    if (columnClass instanceof Class<?>) {
-        Class<?> clazz = (Class<?>) columnClass;  // Safe casting after checking type
-        formatTypes[i] = FormatType.TEXT;
-    } else {
-        throw new ClassCastException("Unexpected type found in queryResult column classes");
+    // Iterate through columnClasses to check if they are safe to cast
+    for (int i = 0; i < columnClasses.size(); i++) {
+        Object columnClass = columnClasses.get(i);
+
+        // Check if it's safe to cast the object to Class
+        if (columnClass instanceof Class<?>) {
+            // Proceed with safe casting
+            formatTypes[i] = FormatType.TEXT; // You can adjust this logic as needed
+        } else {
+            // Unsafe to cast, log the issue and return false
+            System.out.println("Unsafe casting detected at index " + i);
+            return false;
+        }
     }
-}
 
+    // If everything is safe, proceed with further operations
+    QueryResultToExcel resultToExcel = new QueryResultToExcel(queryResult, formatTypes, "Results");
+
+    // Return true to indicate success
+    return true;
+}
