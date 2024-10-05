@@ -43,3 +43,49 @@ public boolean processQueryResult(QueryResult queryResult) {
     // Return true to indicate success
     return true;
 }
+
+
+import org.owasp.encoder.Encode;
+import java.sql.SQLException;
+
+@Slf4j
+@CrossOrigin(maxAge = 3600)
+@RestController
+public class LoginController {
+
+    private EnvRoutingDataSource dataSourceRouting = EnvRoutingDataSource.getInstance();
+
+    @Autowired
+    private AuthenticationService authenticationService;
+
+    @PostMapping("/api/login")
+    public ResponseEntity<?> login(@RequestBody User user) {
+
+        try {
+            // Sanitize and encode the selected environment, username, and password using OWASP encoder
+            String sanitizedEnv = Encode.forJava(user.getSelectedEnv());
+            String sanitizedUsername = Encode.forJava(user.getUsername());
+            String sanitizedPassword = Encode.forJava(user.getPassword());
+
+            // Check if the sanitized environment exists in the data source
+            if (dataSourceRouting.getDataSourceMapForEnv(sanitizedEnv)) {
+                // Create a new sanitized User object or modify the existing one
+                User sanitizedUser = new User(sanitizedUsername, sanitizedPassword, sanitizedEnv);
+                
+                // Pass the sanitized user to the authentication service
+                return authenticationService.authenticateUser(sanitizedUser);
+            } else {
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("Selected DB not available");
+            }
+
+        } catch (SQLException ex) {
+            log.error("Database error: {}", ex.getMessage(), ex);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Selected DB not available");
+        } catch (Exception ex) {
+            log.error("An unexpected error occurred: {}", ex.getMessage(), ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An unexpected error occurred");
+        }
+    }
+}
+
+
