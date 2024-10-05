@@ -44,8 +44,7 @@ public boolean processQueryResult(QueryResult queryResult) {
     return true;
 }
 
-
-import org.owasp.encoder.Encode;
+import org.owasp.esapi.ESAPI;
 import java.sql.SQLException;
 
 @Slf4j
@@ -62,10 +61,10 @@ public class LoginController {
     public ResponseEntity<?> login(@RequestBody User user) {
 
         try {
-            // Sanitize and encode the selected environment, username, and password using OWASP encoder
-            String sanitizedEnv = Encode.forJava(user.getSelectedEnv());
-            String sanitizedUsername = Encode.forJava(user.getUsername());
-            String sanitizedPassword = Encode.forJava(user.getPassword());
+            // Sanitize and encode the selected environment, username, and password using ESAPI
+            String sanitizedEnv = ESAPI.encoder().encodeForSQL(null, user.getSelectedEnv());
+            String sanitizedUsername = ESAPI.encoder().encodeForSQL(null, user.getUsername());
+            String sanitizedPassword = ESAPI.encoder().encodeForSQL(null, user.getPassword());
 
             // Check if the sanitized environment exists in the data source
             if (dataSourceRouting.getDataSourceMapForEnv(sanitizedEnv)) {
@@ -87,5 +86,4 @@ public class LoginController {
         }
     }
 }
-
 
