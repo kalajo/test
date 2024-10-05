@@ -56,3 +56,12 @@ Logger=org.owasp.esapi.reference.JavaLogFactory
 # Specify the location of the validation.properties file
 Validator.ConfigurationFile=validation.properties
 
+
+
+# validation.properties
+
+# Allow any string for LDAP as an example
+Validator.Type.Username=^[a-zA-Z0-9.@_-]+$
+
+# You can configure more validation rules if needed for other input types
+
