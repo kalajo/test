@@ -105,6 +105,32 @@ public class LoginController {
 
 
 
+
+
+
+# === Validator Settings ===
+
+# Optional: Path to custom validation properties (for regex-based validation rules)
+Validator.ConfigurationFile=validation.properties
+
+# === File and Locale Settings ===
+
+# Resource directories for ESAPI
+ESAPI.SecurityConfiguration.FilePath=esapi
+ESAPI.SecurityConfiguration.ResourceDirectory=src/main/resources
+
+# Secure random algorithm (adjust if needed)
+ESAPI.SecurityConfiguration.SecureRandomAlgorithm=SHA1PRNG
+
+
+
+
+
+
+
+
+
+
 # === OWASP ESAPI Configuration ===
 
 # Default Encoder and Decoder for ESAPI
@@ -155,7 +181,7 @@ SQL.DatabaseCodec=MySQLCodec  # Use 'MySQLCodec', or change to 'OracleCodec', 'P
 # Logger settings
 Logger=org.owasp.esapi.reference.JavaLogFactory
 LogLevel=ERROR
-LogEncodingRequired=false
+LogEncodingRequired=false  # Set this explicitly to fix the error
 LogApplicationName=MyApp
 LogServerIP=localhost
 LogServerName=localhost
@@ -189,11 +215,6 @@ ESAPI.SecurityConfiguration.SecureRandomAlgorithm=SHA1PRNG
 
 
 
-
-
-
-Validator.Type.Username=^[a-zA-Z0-9._-]{3,}$   # Username must have at least 3 characters
-Validator.Type.Password=^.{8,}$                # Password must be at least 8 characters
 
 
 
