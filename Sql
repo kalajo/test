@@ -22,12 +22,9 @@ spring.mvc.cors.max-age=3600
 
 
 
-
 import org.owasp.esapi.ESAPI;
 import org.owasp.esapi.Encoder;
 import org.owasp.esapi.codecs.MySQLCodec;
-import org.owasp.esapi.codecs.OracleCodec;
-import org.owasp.esapi.codecs.LDAPCodec;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
@@ -39,19 +36,18 @@ import lombok.extern.slf4j.Slf4j;
 public class LoginController {
 
     private final Encoder encoder = ESAPI.encoder(); // Initialize ESAPI encoder
-    private final MySQLCodec mySQLCodec = new MySQLCodec(); // MySQL codec for SQL sanitization
-    private final LDAPCodec ldapCodec = new LDAPCodec(); // LDAP codec for LDAP sanitization
+    private final MySQLCodec mySQLCodec = new MySQLCodec(); // SQL codec for SQL sanitization
 
     @PostMapping("/api/login")
     public ResponseEntity<?> login(@RequestBody User user) {
         try {
-            // Sanitize inputs for LDAP and SQL using proper codecs
-            String sanitizedUsernameForLDAP = encoder.encodeForLDAP(ldapCodec, user.getUsername());
-            String sanitizedPasswordForLDAP = encoder.encodeForLDAP(ldapCodec, user.getPassword());
+            // Sanitize inputs for LDAP (no codec required for LDAP)
+            String sanitizedUsernameForLDAP = encoder.encodeForLDAP(user.getUsername());
+            String sanitizedPasswordForLDAP = encoder.encodeForLDAP(user.getPassword());
 
             log.info("Sanitized Username for LDAP: {}", sanitizedUsernameForLDAP);
 
-            // Sanitize SQL input
+            // Sanitize SQL input with MySQL codec (use different codecs for other databases)
             String sqlSafeUsername = encoder.encodeForSQL(mySQLCodec, user.getUsername());
             String sqlSafePassword = encoder.encodeForSQL(mySQLCodec, user.getPassword());
 
@@ -71,8 +67,8 @@ public class LoginController {
 
     // Dummy method simulating LDAP authentication
     private boolean authenticateAgainstLdap(String username, String password) {
-        // Implement LDAP authentication here with the sanitized username and password
-        return "user".equals(username) && "password".equals(password);  // Replace with actual LDAP logic
+        // Here, you would implement actual LDAP authentication logic with sanitized inputs.
+        return "user".equals(username) && "password".equals(password);  // Replace with real LDAP authentication logic.
     }
 }
 
