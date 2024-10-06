@@ -18,50 +18,78 @@ spring.mvc.cors.allow-credentials=true
 spring.mvc.cors.max-age=3600
 
 
-public boolean processQueryResult(QueryResult queryResult) {
-    List<Object> columnClasses = queryResult.getColumnClass(); // Get the column classes from queryResult
-    FormatType[] formatTypes = new FormatType[columnClasses.size()]; // Initialize formatTypes array
 
-    // Iterate through columnClasses to check if they are safe to cast
-    for (int i = 0; i < columnClasses.size(); i++) {
-        Object columnClass = columnClasses.get(i);
 
-        // Check if it's safe to cast the object to Class
-        if (columnClass instanceof Class<?>) {
-            // Proceed with safe casting
-            formatTypes[i] = FormatType.TEXT; // You can adjust this logic as needed
-        } else {
-            // Unsafe to cast, log the issue and return false
-            System.out.println("Unsafe casting detected at index " + i);
-            return false;
+To hardcode ESAPI properties directly into your code, you can use the `ESAPI.configuration()` method to set the configuration settings programmatically.
+
+Here's an updated version of your code:
+
+```
+import org.owasp.esapi.ESAPI;
+import org.owasp.esapi.Encoder;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+@CrossOrigin(maxAge = 3600)
+@RestController
+public class LoginController {
+
+    @PostConstruct
+    public void init() {
+        // Hardcode ESAPI properties
+        System.setProperty("org.owasp.esapi.ConfigurationFile", "NONE");
+        ESAPI.configuration().setLogApplicationName("MyApp");
+        ESAPI.configuration().setLogSeverityLevel("INFO");
+        ESAPI.configuration().setEncoder("org.owasp.esapi.reference.DefaultEncoder");
+        ESAPI.configuration().setEncryption("org.owasp.esapi.reference.DefaultCrypto");
+
+        // Initialize the legacy encoder
+        encoder = ESAPI.encoder();
+    }
+
+    private Encoder encoder;
+
+    @PostMapping("/api/login")
+    public ResponseEntity<?> login(@RequestBody User user) {
+        try {
+            // Sanitize the username and password using the ESAPI encoder
+            String sanitizedUsername = encoder.encodeForLDAP(user.getUsername());
+            String sanitizedPassword = encoder.encodeForLDAP(user.getPassword());
+
+            log.info("Attempting to log in user: " + sanitizedUsername);
+
+            // Pass sanitized values to the authentication method
+            boolean isAuthenticated = authenticateUser(sanitizedUsername, sanitizedPassword);
+
+            if (isAuthenticated) {
+                return ResponseEntity.ok("Login successful");
+            } else {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials");
+            }
+        } catch (Exception ex) {
+            log.error("Error occurred during login", ex);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Login failed");
         }
     }
 
-    // If everything is safe, proceed with further operations
-    QueryResultToExcel resultToExcel = new QueryResultToExcel(queryResult, formatTypes, "Results");
-
-    // Return true to indicate success
-    return true;
+    // Sample method to authenticate the user (replace with your actual logic)
+    private boolean authenticateUser(String username, String password) {
+        // Dummy authentication logic
+        return "user".equals(username) && "password".equals(password);
+    }
 }
-# ESAPI.properties
+```
 
-# Encoder and Validator class configurations
-Encoder.Default=org.owasp.esapi.reference.DefaultEncoder
-Validator.Default=org.owasp.esapi.reference.DefaultValidator
+*Changes Made:*
 
-# Logging configuration for debugging
-LogLevel=DEBUG
-Logger=org.owasp.esapi.reference.JavaLogFactory
+1. Added `@PostConstruct` method `init()` to hardcode ESAPI properties.
+2. Set `org.owasp.esapi.ConfigurationFile` to `"NONE"` to prevent loading from a properties file.
+3. Configured ESAPI settings programmatically using `ESAPI.configuration()`.
+4. Initialized the `encoder` variable after configuring ESAPI.
 
-# Specify the location of the validation.properties file
-Validator.ConfigurationFile=validation.properties
+*Note:* This approach sets ESAPI configuration globally for your application. Ensure you understand the implications and adjust settings according to your requirements.
 
-
-
-# validation.properties
-
-# Allow any string for LDAP as an example
-Validator.Type.Username=^[a-zA-Z0-9.@_-]+$
-
-# You can configure more validation rules if needed for other input types
-
+Please test this updated code to verify that it resolves your issue.
