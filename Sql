@@ -93,3 +93,45 @@ public class LoginController {
 *Note:* This approach sets ESAPI configuration globally for your application. Ensure you understand the implications and adjust settings according to your requirements.
 
 Please test this updated code to verify that it resolves your issue.
+
+
+
+The `ESAPI.configuration()` method has been removed in ESAPI 2.x versions.
+
+Instead, you can use the `org.owasp.esapi.ESAPI` class constructor to initialize ESAPI with a custom configuration.
+
+Here's an updated example:
+
+```
+import org.owasp.esapi.ESAPI;
+import org.owasp.esapi.Encoder;
+
+// ...
+
+private Encoder encoder;
+
+@PostConstruct
+public void init() {
+    // Create a custom ESAPI configuration
+    org.owasp.esapi.config.Configuration config = new org.owasp.esapi.config.Configuration();
+    config.setLogApplicationName("MyApp");
+    config.setLogSeverityLevel(org.owasp.esapi.config.LogLevel.INFO);
+    config.setEncoder(org.owasp.esapi.reference.DefaultEncoder.class.getName());
+    config.setEncryption(org.owasp.esapi.reference.DefaultCrypto.class.getName());
+
+    // Initialize ESAPI with the custom configuration
+    ESAPI esapi = new ESAPI(config);
+    encoder = esapi.getEncoder();
+}
+```
+
+Make sure to import the correct classes:
+
+```
+import org.owasp.esapi.config.Configuration;
+import org.owasp.esapi.config.LogLevel;
+```
+
+Also, ensure you're using the correct ESAPI version (2.x) and have the necessary dependencies in your project.
+
+If you're still facing issues, please provide more details about your project setup and error messages.
