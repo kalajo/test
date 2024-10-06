@@ -22,42 +22,49 @@ spring.mvc.cors.max-age=3600
 
 
 
-Here's the adjusted code without using configuration files:
 
 
-```
+
+
+
+
+
+
+
+
+
+
 import org.owasp.esapi.ESAPI;
 import org.owasp.esapi.Encoder;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @CrossOrigin(maxAge = 3600)
 @RestController
 public class LoginController {
 
-    private Encoder encoder;
-
-    @PostConstruct
-    public void init() {
-        // Initialize ESAPI
-        ESAPI.initialize();
-
-        // Get the encoder
-        encoder = ESAPI.encoder();
-    }
+    private final Encoder encoder = ESAPI.encoder(); // Initialize ESAPI encoder
 
     @PostMapping("/api/login")
     public ResponseEntity<?> login(@RequestBody User user) {
         try {
-            // Sanitize the username and password using the ESAPI encoder
+            // Sanitize inputs for LDAP and SQL
             String sanitizedUsername = encoder.encodeForLDAP(user.getUsername());
             String sanitizedPassword = encoder.encodeForLDAP(user.getPassword());
 
-            log.info("Attempting to log in user: " + sanitizedUsername);
+            log.info("Sanitized Username: {}", sanitizedUsername);
 
-            // Pass sanitized values to the authentication method
-            boolean isAuthenticated = authenticateUser(sanitizedUsername, sanitizedPassword);
+            // Check for sanitized SQL injection safe inputs (SQL-safe sanitization)
+            String sqlSafeUsername = encoder.encodeForSQL(ESAPI.codec().getCodec("MySQL"), user.getUsername());
+            String sqlSafePassword = encoder.encodeForSQL(ESAPI.codec().getCodec("MySQL"), user.getPassword());
 
-            if (isAuthenticated) {
+            log.info("SQL-Safe Username: {}", sqlSafeUsername);
+
+            // Perform LDAP-based authentication
+            if (authenticateAgainstLdap(sanitizedUsername, sanitizedPassword)) {
                 return ResponseEntity.ok("Login successful");
             } else {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials");
@@ -68,20 +75,111 @@ public class LoginController {
         }
     }
 
-    // Sample method to authenticate the user (replace with your actual logic)
-    private boolean authenticateUser(String username, String password) {
-        // Dummy authentication logic
-        return "user".equals(username) && "password".equals(password);
+    // Dummy method simulating LDAP authentication
+    private boolean authenticateAgainstLdap(String username, String password) {
+        // Implement LDAP authentication here with the sanitized username and password
+        return "user".equals(username) && "password".equals(password);  // Replace with actual LDAP logic
     }
 }
-```
 
 
-This code initializes ESAPI without using configuration files and uses the default settings.
 
 
-Note: Ensure ESAPI is properly integrated into your project and required dependencies are included.
+# === OWASP ESAPI Configuration ===
+
+# Default Encoder and Decoder for ESAPI
+Encoder.Default=org.owasp.esapi.reference.DefaultEncoder
+Decoder.Default=org.owasp.esapi.reference.DefaultDecoder
+
+# Default Validator for inputs
+Validator.Default=org.owasp.esapi.reference.DefaultValidator
+
+# === Security Configuration ===
+
+# Character encoding for all input/output operations
+ESAPI.SecurityConfiguration.DefaultCharacterEncoding=UTF-8
+
+# Default locale
+ESAPI.SecurityConfiguration.DefaultLocale=en_US
+
+# Allow canonicalization (set to false to prevent encoding issues)
+ESAPI.SecurityConfiguration.AllowMultipleEncoding=false
+ESAPI.SecurityConfiguration.AllowMixedEncoding=false
+
+# Maximum allowed size for input to prevent large data attacks
+ESAPI.SecurityConfiguration.MaxInputSize=10000
+
+# Encryption and hashing configuration
+ESAPI.SecurityConfiguration.MasterKey="YourMasterKeyHere"  # Change this to a real key
+ESAPI.SecurityConfiguration.EncryptionAlgorithm=AES
+ESAPI.SecurityConfiguration.HashAlgorithm=SHA-256
+
+# Encryption and hashing iterations
+ESAPI.SecurityConfiguration.EncryptionKeyLength=128
+ESAPI.SecurityConfiguration.HashIterations=1000
+ESAPI.SecurityConfiguration.EncryptionIterations=1000
+
+# === LDAP/SQL Settings ===
+
+# LDAP Sanitization
+LDAP.AllowedChars=A-Za-z0-9
+LDAP.MaxInputLength=100  # Set this based on your LDAP requirements
+
+# SQL Sanitization - Adjust based on the database used (e.g., MySQL, Oracle)
+SQL.AllowedChars=A-Za-z0-9_-
+SQL.MaxInputLength=255
+SQL.DatabaseCodec=MySQLCodec  # Change this to the codec of your database (e.g., OracleCodec, MySQLCodec)
+
+# === Logging Configuration ===
+
+# Logger settings
+Logger=org.owasp.esapi.reference.JavaLogFactory
+LogLevel=ERROR
+LogEncodingRequired=false
+LogApplicationName=MyApp
+LogServerIP=localhost
+LogServerName=localhost
+
+# === Intrusion Detection ===
+
+# Enable or disable intrusion detection
+IntrusionDetector.Enabled=true
+
+# Thresholds for detecting multiple failed attempts (adjust as needed)
+IntrusionDetector.UserThreshold=5
+IntrusionDetector.IPThreshold=5
+IntrusionDetector.AppThreshold=5
+
+# === Validator Settings ===
+
+# Optional: Path to custom validation properties (for regex-based validation rules)
+Validator.ConfigurationFile=validation.properties
+
+# === File and Locale Settings ===
+
+# Resource directories for ESAPI
+ESAPI.SecurityConfiguration.FilePath=esapi
+ESAPI.SecurityConfiguration.ResourceDirectory=src/main/resources
+
+# Secure random algorithm (adjust if needed)
+ESAPI.SecurityConfiguration.SecureRandomAlgorithm=SHA1PRNG
 
 
-This concludes our conversation.
+
+
+Validator.Type.Username=^[a-zA-Z0-9._-]{3,}$   # Username must have at least 3 characters
+Validator.Type.Password=^.{8,}$                # Password must be at least 8 characters
+
+
+
+
+
+
+
+
+
+
+
+
+
 
