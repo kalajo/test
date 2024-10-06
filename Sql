@@ -100,6 +100,11 @@ public class LoginController {
 
 
 
+
+
+
+
+
 # === OWASP ESAPI Configuration ===
 
 # Default Encoder and Decoder for ESAPI
@@ -136,14 +141,14 @@ ESAPI.SecurityConfiguration.EncryptionIterations=1000
 
 # === LDAP/SQL Settings ===
 
-# LDAP Sanitization
+# LDAP sanitization (Use default encoding for LDAP)
 LDAP.AllowedChars=A-Za-z0-9
 LDAP.MaxInputLength=100  # Set this based on your LDAP requirements
 
 # SQL Sanitization - Adjust based on the database used (e.g., MySQL, Oracle)
 SQL.AllowedChars=A-Za-z0-9_-
 SQL.MaxInputLength=255
-SQL.DatabaseCodec=MySQLCodec  # Change this to the codec of your database (e.g., OracleCodec, MySQLCodec)
+SQL.DatabaseCodec=MySQLCodec  # Use 'MySQLCodec', or change to 'OracleCodec', 'PostgreSQLCodec', etc.
 
 # === Logging Configuration ===
 
@@ -178,6 +183,11 @@ ESAPI.SecurityConfiguration.ResourceDirectory=src/main/resources
 
 # Secure random algorithm (adjust if needed)
 ESAPI.SecurityConfiguration.SecureRandomAlgorithm=SHA1PRNG
+
+
+
+
+
 
 
 
