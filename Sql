@@ -20,37 +20,30 @@ spring.mvc.cors.max-age=3600
 
 
 
-To hardcode ESAPI properties directly into your code, you can use the `ESAPI.configuration()` method to set the configuration settings programmatically.
 
-Here's an updated version of your code:
+
+Here's the adjusted code without using configuration files:
+
 
 ```
 import org.owasp.esapi.ESAPI;
 import org.owasp.esapi.Encoder;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatus;
-import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @CrossOrigin(maxAge = 3600)
 @RestController
 public class LoginController {
 
+    private Encoder encoder;
+
     @PostConstruct
     public void init() {
-        // Hardcode ESAPI properties
-        System.setProperty("org.owasp.esapi.ConfigurationFile", "NONE");
-        ESAPI.configuration().setLogApplicationName("MyApp");
-        ESAPI.configuration().setLogSeverityLevel("INFO");
-        ESAPI.configuration().setEncoder("org.owasp.esapi.reference.DefaultEncoder");
-        ESAPI.configuration().setEncryption("org.owasp.esapi.reference.DefaultCrypto");
+        // Initialize ESAPI
+        ESAPI.initialize();
 
-        // Initialize the legacy encoder
+        // Get the encoder
         encoder = ESAPI.encoder();
     }
-
-    private Encoder encoder;
 
     @PostMapping("/api/login")
     public ResponseEntity<?> login(@RequestBody User user) {
@@ -83,55 +76,12 @@ public class LoginController {
 }
 ```
 
-*Changes Made:*
 
-1. Added `@PostConstruct` method `init()` to hardcode ESAPI properties.
-2. Set `org.owasp.esapi.ConfigurationFile` to `"NONE"` to prevent loading from a properties file.
-3. Configured ESAPI settings programmatically using `ESAPI.configuration()`.
-4. Initialized the `encoder` variable after configuring ESAPI.
-
-*Note:* This approach sets ESAPI configuration globally for your application. Ensure you understand the implications and adjust settings according to your requirements.
-
-Please test this updated code to verify that it resolves your issue.
+This code initializes ESAPI without using configuration files and uses the default settings.
 
 
+Note: Ensure ESAPI is properly integrated into your project and required dependencies are included.
 
-The `ESAPI.configuration()` method has been removed in ESAPI 2.x versions.
 
-Instead, you can use the `org.owasp.esapi.ESAPI` class constructor to initialize ESAPI with a custom configuration.
+This concludes our conversation.
 
-Here's an updated example:
-
-```
-import org.owasp.esapi.ESAPI;
-import org.owasp.esapi.Encoder;
-
-// ...
-
-private Encoder encoder;
-
-@PostConstruct
-public void init() {
-    // Create a custom ESAPI configuration
-    org.owasp.esapi.config.Configuration config = new org.owasp.esapi.config.Configuration();
-    config.setLogApplicationName("MyApp");
-    config.setLogSeverityLevel(org.owasp.esapi.config.LogLevel.INFO);
-    config.setEncoder(org.owasp.esapi.reference.DefaultEncoder.class.getName());
-    config.setEncryption(org.owasp.esapi.reference.DefaultCrypto.class.getName());
-
-    // Initialize ESAPI with the custom configuration
-    ESAPI esapi = new ESAPI(config);
-    encoder = esapi.getEncoder();
-}
-```
-
-Make sure to import the correct classes:
-
-```
-import org.owasp.esapi.config.Configuration;
-import org.owasp.esapi.config.LogLevel;
-```
-
-Also, ensure you're using the correct ESAPI version (2.x) and have the necessary dependencies in your project.
-
-If you're still facing issues, please provide more details about your project setup and error messages.
