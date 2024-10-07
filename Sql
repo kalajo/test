@@ -23,28 +23,6 @@ spring.mvc.cors.max-age=3600
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 private String escapeLDAPSearchFilter(String input) {
     if (input == null || input.isEmpty()) {
         return "";
@@ -69,11 +47,35 @@ private String escapeLDAPSearchFilter(String input) {
             case '\u0000': // Null character
                 sb.append("\\00");
                 break;
-            case '/': // Forward slash (optional based on your needs)
+            case '/': // Forward slash
                 sb.append("\\2f");
                 break;
-            case '=': // Equals sign (optional, but adds extra safety)
+            case '=': // Equals sign
                 sb.append("\\3d");
+                break;
+            case ',': // Comma
+                sb.append("\\2c");
+                break;
+            case '+': // Plus sign
+                sb.append("\\2b");
+                break;
+            case '<': // Less than
+                sb.append("\\3c");
+                break;
+            case '>': // Greater than
+                sb.append("\\3e");
+                break;
+            case ';': // Semicolon
+                sb.append("\\3b");
+                break;
+            case '"': // Double quote
+                sb.append("\\22");
+                break;
+            case '#': // Hash/Pound sign
+                sb.append("\\23");
+                break;
+            case ':': // Colon
+                sb.append("\\3a");
                 break;
             default:
                 if (c < 0x20 || c > 0x7E) { // Non-printable ASCII characters
@@ -86,6 +88,20 @@ private String escapeLDAPSearchFilter(String input) {
 
     return sb.toString();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
