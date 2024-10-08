@@ -24,74 +24,27 @@ spring.mvc.cors.max-age=3600
 
 
 private String escapeLDAPSearchFilter(String input) {
-    if (input == null || input.isEmpty()) {
-        return "";
+    if (input == null || input.isEmpty()) { 
+        return ""; 
     }
 
-    StringBuilder sb = new StringBuilder(input.length());
+    input = input.replaceAll("\\\\", "\\\\5c");  // Escape backslash
+    input = input.replaceAll("\\*", "\\\\2a");   // Escape asterisk
+    input = input.replaceAll("\\(", "\\\\28");   // Escape left parenthesis
+    input = input.replaceAll("\\)", "\\\\29");   // Escape right parenthesis
+    input = input.replaceAll("\u0000", "\\\\00"); // Escape null character
+    input = input.replaceAll("/", "\\\\2f");     // Escape forward slash
+    input = input.replaceAll("=", "\\\\3d");     // Escape equals sign
+    input = input.replaceAll(",", "\\\\2c");     // Escape comma
+    input = input.replaceAll("<", "\\\\3c");     // Escape less than
+    input = input.replaceAll(">", "\\\\3e");     // Escape greater than
+    input = input.replaceAll(";", "\\\\3b");     // Escape semicolon
+    input = input.replaceAll("\"", "\\\\22");    // Escape double quote
+    input = input.replaceAll("#", "\\\\23");     // Escape hash
+    input = input.replaceAll(":", "\\\\3a");     // Escape colon
 
-    for (char c : input.toCharArray()) {
-        switch (c) {
-            case '\\': // Backslash
-                sb.append("\\5c");
-                break;
-            case '*': // Asterisk
-                sb.append("\\2a");
-                break;
-            case '(': // Opening parenthesis
-                sb.append("\\28");
-                break;
-            case ')': // Closing parenthesis
-                sb.append("\\29");
-                break;
-            case '\u0000': // Null character
-                sb.append("\\00");
-                break;
-            case '/': // Forward slash
-                sb.append("\\2f");
-                break;
-            case '=': // Equals sign
-                sb.append("\\3d");
-                break;
-            case ',': // Comma
-                sb.append("\\2c");
-                break;
-            case '+': // Plus sign
-                sb.append("\\2b");
-                break;
-            case '<': // Less than
-                sb.append("\\3c");
-                break;
-            case '>': // Greater than
-                sb.append("\\3e");
-                break;
-            case ';': // Semicolon
-                sb.append("\\3b");
-                break;
-            case '"': // Double quote
-                sb.append("\\22");
-                break;
-            case '#': // Hash/Pound sign
-                sb.append("\\23");
-                break;
-            case ':': // Colon
-                sb.append("\\3a");
-                break;
-            default:
-                if (c < 0x20 || c > 0x7E) { // Non-printable ASCII characters
-                    sb.append(String.format("\\%02x", (int) c));
-                } else {
-                    sb.append(c);
-                }
-        }
-    }
-
-    return sb.toString();
+    return input;
 }
-
-
-
-
 
 
 
