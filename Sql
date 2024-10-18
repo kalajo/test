@@ -6,31 +6,51 @@ SELECT
     doc.description AS delivery_method
 FROM 
     CES01.change_event_request cer
-    LEFT JOIN CES01.change_event ce ON ce.change_event_request_id = cer.id
-    LEFT JOIN CES01.plan_change_event pce ON pce.change_event_id = ce.id
-    LEFT JOIN CES01.mailing ma ON ma.plan_change_event_id = pce.id
-    LEFT JOIN CES01.change_event_mailing_type cemt ON ma.change_event_mailing_type_id = cemt.id
-    LEFT JOIN CES01.mailing_type mt ON mt.id = cemt.mailing_type_id
-    LEFT JOIN CES01.change_event_type cet ON cet.id = cemt.change_event_type_id
-    LEFT JOIN CES01.mailing_cop_files mcf ON mcf.mailing_id = ma.id
-    LEFT JOIN CES01.mailing_detail mad ON mad.mailing_id = ma.id
-    LEFT JOIN CES01.disclosure_assist_request dar ON dar.change_event_id = ce.id
+    LEFT JOIN CES01.change_event ce 
+        ON ce.change_event_request_id = cer.id
+    LEFT JOIN CES01.plan_change_event pce 
+        ON pce.change_event_id = ce.id
+    LEFT JOIN CES01.mailing ma 
+        ON ma.plan_change_event_id = pce.id
+    LEFT JOIN CES01.change_event_mailing_type cemt 
+        ON ma.change_event_mailing_type_id = cemt.id
+    LEFT JOIN CES01.mailing_type mt 
+        ON mt.id = cemt.mailing_type_id
+    LEFT JOIN CES01.change_event_type cet 
+        ON cet.id = cemt.change_event_type_id
+    LEFT JOIN CES01.mailing_cop_files mcf 
+        ON mcf.mailing_id = ma.id
+    LEFT JOIN CES01.mailing_detail mad 
+        ON mad.mailing_id = ma.id
+    LEFT JOIN CES01.disclosure_assist_request dar 
+        ON dar.change_event_id = ce.id
     LEFT JOIN CES01.prism_data_staging pds 
-        ON pds.client_id = ce.client_id AND pds.plan_id = pce.plan_number
+        ON pds.client_id = ce.client_id 
+        AND pds.plan_id = pce.plan_number
+
+    -- CCP01 joins to allow NULL matches
     LEFT JOIN CCP01.event_batch eb 
         ON eb.batch_identifier = mcf.ccp_file_name
     LEFT JOIN CCP01.packages p 
-        ON p.input_batch_id = eb.id AND p.package_type_id IS NOT NULL
-    LEFT JOIN CCP01.package_type pt ON pt.id = p.package_type_id
-    LEFT JOIN CCP01.content_type ct ON ct.package_type_id = pt.id
-    LEFT JOIN CCP01.delivery_output_channel doc ON doc.id = p.delivery_output_channel_id
-    LEFT JOIN CCP01.artifact_request ar ON ar.package_id = p.id
+        ON p.input_batch_id = eb.id
+    LEFT JOIN CCP01.package_type pt 
+        ON pt.id = p.package_type_id
+    LEFT JOIN CCP01.content_type ct 
+        ON ct.package_type_id = pt.id
+    LEFT JOIN CCP01.delivery_output_channel doc 
+        ON doc.id = p.delivery_output_channel_id
+    LEFT JOIN CCP01.artifact_request ar 
+        ON ar.package_id = p.id
+
 WHERE 
-    eb.batch_identifier IS NOT NULL
-    AND extractvalue(
-        xmltype(p.package_data),
-        '/DocumentRequest/DocumentInfoXml/AdhocMailingRequest/AdhocPDFDRI'
-    ) = mad.adhocpdf_dri
-    AND p.created_ts > ma.notice_send_date
-    AND p.delivery_output_channel_id IN (1, 3)
-    AND pce.orchestration_id IN ('PLIAFS45LG3');
+    -- Allow results even if CCP01 data is NULL
+    (eb.batch_identifier = mcf.ccp_file_name OR eb.batch_identifier IS NULL)
+    AND (
+        extractvalue(
+            xmltype(p.package_data),
+            '/DocumentRequest/DocumentInfoXml/AdhocMailingRequest/AdhocPDFDRI'
+        ) = mad.adhocpdf_dri OR mad.adhocpdf_dri IS NULL
+    )
+    AND (p.created_ts > ma.notice_send_date OR p.created_ts IS NULL)
+    AND (p.delivery_output_channel_id IN (1, 3) OR p.delivery_output_channel_id IS NULL)
+    AND (pce.orchestration_id IN ('PLIAFS45LG3') OR pce.orchestration_id IS NULL);
