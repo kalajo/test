@@ -1,65 +1,36 @@
-# 1. Increase server connection timeout (to handle slow requests)
-server.connection-timeout=60s  # Adjust to suit your needs (e.g., 120s)
-
-# 2. Increase maximum file size and request size (even if you're not uploading files, large payloads could cause issues)
-spring.servlet.multipart.max-file-size=10MB
-spring.servlet.multipart.max-request-size=10MB
-
-# 3. HTTP keep-alive settings (to prevent premature connection closure)
-server.http2.enabled=true
-server.tomcat.max-threads=200
-
-# 4. Enable CORS (if the issue might be related to cross-origin resource sharing)
-# Add specific origin if needed, or use "*" for all origins (not recommended for production)
-spring.mvc.cors.allowed-origins=*
-spring.mvc.cors.allowed-methods=GET,POST,PUT,DELETE,OPTIONS
-spring.mvc.cors.allowed-headers=Authorization,Content-Type
-spring.mvc.cors.allow-credentials=true
-spring.mvc.cors.max-age=3600
-
-
-
-
-
-
-
-private String escapeLDAPSearchFilter(String input) {
-    if (input == null || input.isEmpty()) { 
-        return ""; 
-    }
-
-    input = input.replaceAll("\\\\", "\\\\5c");  // Escape backslash
-    input = input.replaceAll("\\*", "\\\\2a");   // Escape asterisk
-    input = input.replaceAll("\\(", "\\\\28");   // Escape left parenthesis
-    input = input.replaceAll("\\)", "\\\\29");   // Escape right parenthesis
-    input = input.replaceAll("\u0000", "\\\\00"); // Escape null character
-    input = input.replaceAll("/", "\\\\2f");     // Escape forward slash
-    input = input.replaceAll("=", "\\\\3d");     // Escape equals sign
-    input = input.replaceAll(",", "\\\\2c");     // Escape comma
-    input = input.replaceAll("<", "\\\\3c");     // Escape less than
-    input = input.replaceAll(">", "\\\\3e");     // Escape greater than
-    input = input.replaceAll(";", "\\\\3b");     // Escape semicolon
-    input = input.replaceAll("\"", "\\\\22");    // Escape double quote
-    input = input.replaceAll("#", "\\\\23");     // Escape hash
-    input = input.replaceAll(":", "\\\\3a");     // Escape colon
-
-    return input;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+SELECT 
+    pds.plan_name,
+    p.id AS package_id, 
+    p.universal_id AS pin, 
+    TO_CHAR(p.created_ts, 'DD-MON-YYYY') AS communication_date, 
+    doc.description AS delivery_method
+FROM 
+    CES01.change_event_request cer
+    LEFT JOIN CES01.change_event ce ON ce.change_event_request_id = cer.id
+    LEFT JOIN CES01.plan_change_event pce ON pce.change_event_id = ce.id
+    LEFT JOIN CES01.mailing ma ON ma.plan_change_event_id = pce.id
+    LEFT JOIN CES01.change_event_mailing_type cemt ON ma.change_event_mailing_type_id = cemt.id
+    LEFT JOIN CES01.mailing_type mt ON mt.id = cemt.mailing_type_id
+    LEFT JOIN CES01.change_event_type cet ON cet.id = cemt.change_event_type_id
+    LEFT JOIN CES01.mailing_cop_files mcf ON mcf.mailing_id = ma.id
+    LEFT JOIN CES01.mailing_detail mad ON mad.mailing_id = ma.id
+    LEFT JOIN CES01.disclosure_assist_request dar ON dar.change_event_id = ce.id
+    LEFT JOIN CES01.prism_data_staging pds 
+        ON pds.client_id = ce.client_id AND pds.plan_id = pce.plan_number
+    LEFT JOIN CCP01.event_batch eb 
+        ON eb.batch_identifier = mcf.ccp_file_name
+    LEFT JOIN CCP01.packages p 
+        ON p.input_batch_id = eb.id AND p.package_type_id IS NOT NULL
+    LEFT JOIN CCP01.package_type pt ON pt.id = p.package_type_id
+    LEFT JOIN CCP01.content_type ct ON ct.package_type_id = pt.id
+    LEFT JOIN CCP01.delivery_output_channel doc ON doc.id = p.delivery_output_channel_id
+    LEFT JOIN CCP01.artifact_request ar ON ar.package_id = p.id
+WHERE 
+    eb.batch_identifier IS NOT NULL
+    AND extractvalue(
+        xmltype(p.package_data),
+        '/DocumentRequest/DocumentInfoXml/AdhocMailingRequest/AdhocPDFDRI'
+    ) = mad.adhocpdf_dri
+    AND p.created_ts > ma.notice_send_date
+    AND p.delivery_output_channel_id IN (1, 3)
+    AND pce.orchestration_id IN ('PLIAFS45LG3');
