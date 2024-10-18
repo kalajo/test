@@ -50,9 +50,6 @@ WHERE
 
 
 
-
-
-
 WITH ces_data AS (
     SELECT 
         cer.id AS cer_id,
@@ -85,33 +82,41 @@ SELECT
     COALESCE(p.universal_id, 'No PIN') AS pin,
     COALESCE(TO_CHAR(p.created_ts, 'DD-MON-YYYY'), 'No Date') AS communication_date,
     COALESCE(doc.description, 'No Delivery Method') AS delivery_method,
-    NVL(xt.element1, 0) AS xml_element1,
-    NVL(xt.element2, 'N/A') AS xml_element2,
-    NVL(xt.element3, 0) AS xml_element3
+    COALESCE(
+        CASE 
+            WHEN p.package_data IS NOT NULL THEN
+                (SELECT NVL(EXTRACTVALUE(XMLTYPE(p.package_data), '/DocumentRequest/DocumentInfoXml/Element1'), '0')
+                 FROM dual)
+            ELSE '0'
+        END, 
+    '0') AS xml_element1,
+    COALESCE(
+        CASE 
+            WHEN p.package_data IS NOT NULL THEN
+                (SELECT NVL(EXTRACTVALUE(XMLTYPE(p.package_data), '/DocumentRequest/DocumentInfoXml/Element2'), 'N/A')
+                 FROM dual)
+            ELSE 'N/A'
+        END, 
+    'N/A') AS xml_element2,
+    COALESCE(
+        CASE 
+            WHEN p.package_data IS NOT NULL THEN
+                (SELECT NVL(EXTRACTVALUE(XMLTYPE(p.package_data), '/DocumentRequest/DocumentInfoXml/Element3'), '0')
+                 FROM dual)
+            ELSE '0'
+        END, 
+    '0') AS xml_element3
 FROM 
     ces_data cd
     LEFT JOIN CCP01.event_batch eb ON eb.batch_identifier = cd.ccp_file_name
     LEFT JOIN CCP01.packages p ON p.input_batch_id = eb.id 
         AND p.package_type_id IS NOT NULL
         AND p.created_ts > cd.notice_send_date
-        AND EXTRACTVALUE(
+        AND (p.package_data IS NULL OR EXTRACTVALUE(
             XMLTYPE(p.package_data),
             '/DocumentRequest/DocumentInfoXml/AdhocMailingRequest/AdhocPDFDRI'
-        ) = cd.adhocpdf_dri
+        ) = cd.adhocpdf_dri)
     LEFT JOIN CCP01.delivery_output_channel doc ON doc.id = p.delivery_output_channel_id
-    OUTER APPLY (
-        SELECT 
-            xt.*
-        FROM 
-            XMLTABLE(
-                '/DocumentRequest/DocumentInfoXml'
-                PASSING XMLTYPE(p.package_data)
-                COLUMNS
-                    element1 NUMBER PATH 'Element1',
-                    element2 VARCHAR2(100) PATH 'Element2',
-                    element3 NUMBER PATH 'Element3'
-            ) xt
-    ) xt
 WHERE
     (p.delivery_output_channel_id IN (1, 3) OR p.delivery_output_channel_id IS NULL);
 
