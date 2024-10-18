@@ -1,10 +1,11 @@
 
+
 SELECT 
     pds.plan_name,
-    p.id AS package_id, 
-    p.universal_id AS pin, 
-    TO_CHAR(p.created_ts, 'DD-MON-YYYY') AS communication_date, 
-    doc.description AS delivery_method
+    NVL(p.id, 0) AS package_id, 
+    NVL(p.universal_id, 'No PIN') AS pin, 
+    NVL(TO_CHAR(p.created_ts, 'DD-MON-YYYY'), 'No Date') AS communication_date, 
+    NVL(doc.description, 'No Delivery Method') AS delivery_method
 FROM 
     CES01.change_event_request cer
     LEFT JOIN CES01.change_event ce ON ce.change_event_request_id = cer.id
@@ -13,7 +14,7 @@ FROM
     LEFT JOIN CES01.change_event_mailing_type cemt ON ma.change_event_mailing_type_id = cemt.id
     LEFT JOIN CES01.mailing_type mt ON mt.id = cemt.mailing_type_id
     LEFT JOIN CES01.change_event_type cet ON cet.id = cemt.change_event_type_id
-    LEFT JOIN CES01.mailing_cop_files mcf ON mcf.mailing_id = ma.id
+    LEFT JOIN CES01.mailing_ccp_files mcf ON mcf.mailing_id = ma.id
     LEFT JOIN CES01.mailing_detail mad ON mad.mailing_id = ma.id
     LEFT JOIN CES01.disclosure_assist_request dar ON dar.change_event_id = ce.id
     LEFT JOIN CES01.prism_data_staging pds 
@@ -29,15 +30,14 @@ FROM
     LEFT JOIN CCP01.delivery_output_channel doc ON doc.id = p.delivery_output_channel_id
     LEFT JOIN CCP01.artifact_request ar ON ar.package_id = p.id
 WHERE 
-    (eb.batch_identifier = mcf.ccp_file_name OR eb.batch_identifier IS NULL) 
+    pce.orchestration_id IN ('PLIAFS45LG3')
+    AND (eb.batch_identifier = mcf.ccp_file_name OR eb.batch_identifier IS NULL) 
     AND (
         extractvalue(
             xmltype(p.package_data),
             '/DocumentRequest/DocumentInfoXml/AdhocMailingRequest/AdhocPDFDRI'
         ) = mad.adhocpdf_dri 
-        OR mad.adhocpdf_dri IS NULL  
+        OR p.package_data IS NULL
     )
     AND (p.created_ts > ma.notice_send_date OR p.created_ts IS NULL)
-    AND (p.delivery_output_channel_id IN (1, 3) OR p.delivery_output_channel_id IS NULL)
-    AND (pce.orchestration_id IN ('PLIAFS45LG3') OR pce.orchestration_id IS NULL);
-
+    AND (p.delivery_output_channel_id IN (1, 3) OR p.delivery_output_channel_id IS NULL);
