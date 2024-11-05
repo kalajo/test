@@ -7,7 +7,7 @@ FROM ccp01.packages p,
      XMLTABLE('/CommunicationEvent/Data/VOAVODRefactorRequest/MainLetter/CrRecord'
               PASSING XMLTYPE(p.package_data)
               COLUMNS CrEfIaCntrctsUnitValue NUMBER PATH 'CrEfIaCntrctsUnitValue',
-                      GbPmCntrctsPymnt NUMBER PATH '../GbRecord/GbPmCntrctsPymnt') x
+                      GbPmCntrctsPymnt NUMBER PATH 'GbRecord/GbPmCntrctsPymnt') x
 WHERE p.created_ts >= TO_DATE('09-NOV-2024', 'DD-MON-YYYY')
   AND (x.CrEfIaCntrctsUnitValue < 1 
 OR x.GbPmCntrctsPymnt < 1);
