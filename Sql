@@ -1,13 +1,16 @@
 SELECT p.id,
        p.universal_id,
        p.created_ts,
-       x.CrEfIaCntrctsUnitValue,
-       x.GbPmCntrctsPymnt
+       cr.CrEfIaCntrctsUnitValue,
+       gb.GbPmCntrctsPymnt
 FROM ccp01.packages p,
      XMLTABLE('/CommunicationEvent/Data/VOAVODRefactorRequest/MainLetter/CrRecord'
               PASSING XMLTYPE(p.package_data)
               COLUMNS CrEfIaCntrctsUnitValue NUMBER PATH 'CrEfIaCntrctsUnitValue',
-                      GbPmCntrctsPymnt NUMBER PATH 'GbRecord/GbPmCntrctsPymnt') x
+                      GbRecord XMLTYPE PATH 'GbRecord') cr,
+     XMLTABLE('/GbRecord'
+              PASSING cr.GbRecord
+              COLUMNS GbPmCntrctsPymnt NUMBER PATH 'GbPmCntrctsPymnt') gb
 WHERE p.created_ts >= TO_DATE('09-NOV-2024', 'DD-MON-YYYY')
-  AND (x.CrEfIaCntrctsUnitValue < 1 
-OR x.GbPmCntrctsPymnt < 1);
+  AND (cr.CrEfIaCntrctsUnitValue < 1 
+OR gb.GbPmCntrctsPymnt < 1);
