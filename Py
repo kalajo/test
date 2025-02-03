@@ -1,5 +1,6 @@
 import requests
 import xml.etree.ElementTree as ET
+import time
 
 # ======= CONFIGURATION ========
 SPLUNK_AUTH_URL = "https://splunk-rest.ops.tiaa-cref.org/services/auth/login"
@@ -7,10 +8,8 @@ BASE_REST_URL = "https://splunk-rest.ops.tiaa-cref.org/services"
 USERNAME = "kalajo"
 PASSWORD = "Qwer"
 VERIFY_SSL = False
+SEARCH_QUERY = "index=* | head 10"  # Basic search for first 10 results
 # ==============================
-
-# Default basic search if no valid search ID found
-BASIC_SEARCH = "| makeresults count=1 | fields - _*"
 
 # Disable SSL warnings if needed
 if not VERIFY_SSL:
@@ -35,7 +34,7 @@ def try_search_endpoints(session_key):
     """Attempt different search endpoints with fallback"""
     endpoints = [
         f"{BASE_REST_URL}/search/jobs",  # Standard endpoint
-        f"{BASE_REST_URL}NS/{USERNAME}/search/search/jobs"  # Namespaced endpoint
+        f"{BASE_REST_URL}NS/{USERNAME}/search/search/jobs"  # Namespaced
     ]
     
     for endpoint in endpoints:
@@ -46,12 +45,11 @@ def try_search_endpoints(session_key):
                     "Authorization": f"Splunk {session_key}",
                     "Content-Type": "application/x-www-form-urlencoded"
                 },
-                data={"search": BASIC_SEARCH, "output_mode": "csv"},
+                data={"search": SEARCH_QUERY, "output_mode": "csv"},
                 verify=VERIFY_SSL
             )
             response.raise_for_status()
             
-            # Try to parse search ID
             root = ET.fromstring(response.content)
             search_id = root.find('.//sid').text
             print(f"Success using endpoint: {endpoint}")
@@ -62,6 +60,51 @@ def try_search_endpoints(session_key):
             continue
             
     return None
+
+def wait_for_completion(session_key, search_id):
+    """Wait for search job to complete"""
+    headers = {"Authorization": f"Splunk {session_key}"}
+    status_url = f"{BASE_REST_URL}/search/jobs/{search_id}"
+    
+    while True:
+        try:
+            response = requests.get(status_url, headers=headers, verify=VERIFY_SSL)
+            root = ET.fromstring(response.content)
+            is_done = root.find('.//s:key[@name="isDone"]', {'s': 'http://dev.splunk.com/ns/rest'})
+            
+            if is_done.text == "1":
+                print("Search completed successfully")
+                return
+                
+            print("Waiting for search to complete...")
+            time.sleep(2)
+            
+        except Exception as e:
+            print(f"Status check failed: {str(e)}")
+            exit(1)
+
+def print_results(session_key, search_id):
+    """Print search results to console"""
+    results_url = f"{BASE_REST_URL}/search/jobs/{search_id}/results"
+    headers = {"Authorization": f"Splunk {session_key}"}
+    
+    try:
+        response = requests.get(
+            results_url,
+            headers=headers,
+            params={"output_mode": "csv"},
+            verify=VERIFY_SSL
+        )
+        response.raise_for_status()
+        
+        print("\nSearch Results:")
+        print("="*50)
+        print(response.text)
+        print("="*50)
+        
+    except Exception as e:
+        print(f"Failed to get results: {str(e)}")
+        exit(1)
 
 def main():
     # Get authenticated session
@@ -81,8 +124,11 @@ def main():
         
     print(f"\nSearch job created successfully! ID: {search_id}")
     
-    # Add results retrieval logic here
-    # ...
+    # Wait for completion
+    wait_for_completion(session_key, search_id)
+    
+    # Print results
+    print_results(session_key, search_id)
 
 if __name__ == "__main__":
     main()
