@@ -1,88 +1,94 @@
 import requests
-import time
 import xml.etree.ElementTree as ET
 
-# Configuration - Edit these values
+# ======= CONFIGURATION ========
 SPLUNK_AUTH_URL = "https://splunk-rest.ops.tiaa-cref.org/services/auth/login"
 SPLUNK_SEARCH_URL = "https://splunk-rest.ops.tiaa-cref.org/services/search/jobs"
 USERNAME = "kalajo"
 PASSWORD = "Qwer"
-SEARCH_QUERY = "search index=* | head 10"  # Simple test query
-OUTPUT_FILE = "results.csv"
+SEARCH_QUERY = "| makeresults count=1"  # Simplest possible valid search
+VERIFY_SSL = False
+# ==============================
 
-# Disable SSL warnings for testing
-requests.packages.urllib3.disable_warnings()
+# Disable SSL warnings if needed
+if not VERIFY_SSL:
+    requests.packages.urllib3.disable_warnings()
+
+# Helper function to print HTTP errors
+def print_error(response, stage):
+    print(f"\n=== ERROR IN {stage} ===")
+    print(f"Status code: {response.status_code}")
+    print("Response headers:")
+    print(response.headers)
+    print("Response content:")
+    try:
+        print(ET.dump(ET.fromstring(response.content)))  # Try to parse as XML
+    except:
+        print(response.text[:1000])  # Print first 1000 chars if not XML
 
 # 1. Authentication
+print("Attempting authentication...")
 auth_response = requests.post(
     SPLUNK_AUTH_URL,
     data={"username": USERNAME, "password": PASSWORD},
-    verify=False
+    verify=VERIFY_SSL
 )
 
-if auth_response.status_code == 200:
-    # Parse session key from XML response
-    root = ET.fromstring(auth_response.content)
-    session_key = root.find('.//sessionKey').text
-    print(f"Authenticated successfully. Session key: {session_key[:15]}...")
-else:
-    print(f"Authentication failed: {auth_response.status_code}")
+if auth_response.status_code != 200:
+    print_error(auth_response, "AUTHENTICATION")
     exit(1)
 
-# 2. Create search job
-search_headers = {
+try:
+    root = ET.fromstring(auth_response.content)
+    session_key = root.find('.//sessionKey').text
+    print(f"Auth success! Session key: {session_key[:15]}...")
+except Exception as e:
+    print("Failed to parse session key:")
+    print(f"Error: {str(e)}")
+    print("Raw response:")
+    print(auth_response.text)
+    exit(1)
+
+# 2. Create Search Job
+print("\nCreating search job...")
+headers = {
     "Authorization": f"Splunk {session_key}",
     "Content-Type": "application/x-www-form-urlencoded"
 }
 
-search_data = {
-    "search": SEARCH_QUERY,
-    "output_mode": "csv"
-}
-
-job_response = requests.post(
+search_response = requests.post(
     SPLUNK_SEARCH_URL,
-    headers=search_headers,
-    data=search_data,
-    verify=False
+    headers=headers,
+    data={"search": SEARCH_QUERY, "output_mode": "json"},
+    verify=VERIFY_SSL
 )
 
-if job_response.status_code in [200, 201]:
-    job_id = ET.fromstring(job_response.content).find('.//sid').text
-    print(f"Search job created. ID: {job_id}")
-else:
-    print(f"Search creation failed: {job_response.status_code}")
+if search_response.status_code not in [200, 201]:
+    print_error(search_response, "SEARCH CREATION")
     exit(1)
 
-# 3. Wait for job completion
-while True:
-    status_response = requests.get(
-        f"{SPLUNK_SEARCH_URL}/{job_id}",
-        headers=search_headers,
-        verify=False
-    )
-    
-    status_root = ET.fromstring(status_response.content)
-    is_done = status_root.find('.//s:key[@name="isDone"]', {'s': 'http://dev.splunk.com/ns/rest'})
-    
-    if is_done.text == "1":
-        print("Search completed successfully")
-        break
-    
-    print("Waiting for search to complete...")
-    time.sleep(2)
+try:
+    job_root = ET.fromstring(search_response.content)
+    search_id = job_root.find('.//sid').text
+    print(f"Search created! SID: {search_id}")
+except Exception as e:
+    print("Failed to parse search ID:")
+    print(f"Error: {str(e)}")
+    print("Raw response:")
+    print(search_response.text)
+    exit(1)
 
-# 4. Get results
+# 3. Get Results (immediate, for testing)
+print("\nFetching results...")
 results_response = requests.get(
-    f"{SPLUNK_SEARCH_URL}/{job_id}/results",
-    headers=search_headers,
-    params={"output_mode": "csv"},
-    verify=False
+    f"{SPLUNK_SEARCH_URL}/{search_id}/results",
+    headers=headers,
+    params={"output_mode": "json"},
+    verify=VERIFY_SSL
 )
 
 if results_response.status_code == 200:
-    with open(OUTPUT_FILE, "w") as f:
-        f.write(results_response.text)
-    print(f"Results saved to {OUTPUT_FILE}")
+    print("Success! Sample results:")
+    print(results_response.json())
 else:
-    print(f"Failed to get results: {results_response.status_code}")
+    print_error(results_response, "RESULTS FETCH")
