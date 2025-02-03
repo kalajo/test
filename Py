@@ -1,0 +1,130 @@
+"""
+Splunk Query Executor
+Author: Assistant
+Date: 2023-08-21
+
+Usage:
+    python splunk_query.py --query "search index=* | head 10" --output results.csv
+    python splunk_query.py --saved-search "Saved_Search_Name" --output results.csv
+"""
+
+import requests
+import argparse
+import time
+import xml.etree.ElementTree as ET
+from urllib3.exceptions import InsecureRequestWarning
+
+# Disable SSL warnings (use proper certificates in production)
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+
+class SplunkQueryExecutor:
+    def __init__(self, host, username, password):
+        self.base_url = f"https://{host}/services"
+        self.session_key = None
+        self.username = username
+        self.password = password
+        self.verify_ssl = False  # Should be True in production
+        self._authenticate()
+
+    def _authenticate(self):
+        """Authenticate to Splunk and obtain session key"""
+        auth_url = f"{self.base_url}/auth/login"
+        response = requests.post(
+            auth_url,
+            data={'username': self.username, 'password': self.password},
+            verify=self.verify_ssl
+        )
+
+        if response.status_code != 200:
+            raise ConnectionError(f"Authentication failed: {response.status_code} - {response.text}")
+
+        root = ET.fromstring(response.content)
+        self.session_key = root.find('.//sessionKey').text
+
+    def _execute_search(self, search_query, is_saved_search=False):
+        """Create and execute a search job"""
+        search_url = f"{self.base_url}/search/jobs"
+        headers = {
+            'Authorization': f'Splunk {self.session_key}',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+
+        query = f'| savedsearch {search_query}' if is_saved_search else search_query
+        payload = {'search': query, 'output_mode': 'csv'}
+
+        response = requests.post(
+            search_url,
+            headers=headers,
+            data=payload,
+            verify=self.verify_ssl
+        )
+
+        if response.status_code not in [200, 201]:
+            raise RuntimeError(f"Search initiation failed: {response.status_code} - {response.text}")
+
+        root = ET.fromstring(response.content)
+        return root.find('.//sid').text
+
+    def _wait_for_completion(self, search_id):
+        """Wait for search job to complete"""
+        status_url = f"{self.base_url}/search/jobs/{search_id}"
+        headers = {'Authorization': f'Splunk {self.session_key}'}
+
+        while True:
+            response = requests.get(status_url, headers=headers, verify=self.verify_ssl)
+            root = ET.fromstring(response.content)
+            is_done = root.find('.//s:key[@name="isDone"]', {'s': 'http://dev.splunk.com/ns/rest'})
+            
+            if is_done.text == '1':
+                return
+            time.sleep(2)
+
+    def _get_results(self, search_id):
+        """Retrieve search results"""
+        results_url = f"{self.base_url}/search/jobs/{search_id}/results"
+        headers = {'Authorization': f'Splunk {self.session_key}'}
+        params = {'output_mode': 'csv'}
+        
+        response = requests.get(results_url, headers=headers, params=params, verify=self.verify_ssl)
+        return response.text
+
+    def execute(self, query, output_file, is_saved_search=False):
+        """Execute full search workflow"""
+        search_id = self._execute_search(query, is_saved_search)
+        print(f"Search job {search_id} created")
+        self._wait_for_completion(search_id)
+        results = self._get_results(search_id)
+        
+        with open(output_file, 'w') as f:
+            f.write(results)
+        print(f"Results saved to {output_file}")
+
+def main():
+    parser = argparse.ArgumentParser(description='Execute Splunk queries')
+    parser.add_argument('--query', help='Raw SPL query to execute')
+    parser.add_argument('--saved-search', help='Name of saved search to execute')
+    parser.add_argument('--output', required=True, help='Output file path')
+    parser.add_argument('--host', default='splunk-rest.ops.tiaa-cref.org', help='Splunk REST API host')
+    args = parser.parse_args()
+
+    if not args.query and not args.saved_search:
+        parser.error("You must specify either --query or --saved-search")
+
+    # Initialize with credentials
+    executor = SplunkQueryExecutor(
+        host=args.host,
+        username="kalajo",  # Consider moving these to config/environment variables
+        password="Qwer"
+    )
+
+    try:
+        if args.query:
+            executor.execute(args.query, args.output)
+        else:
+            executor.execute(args.saved_search, args.output, is_saved_search=True)
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        exit(1)
+
+if __name__ == "__main__":
+    main()
