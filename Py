@@ -3,92 +3,86 @@ import xml.etree.ElementTree as ET
 
 # ======= CONFIGURATION ========
 SPLUNK_AUTH_URL = "https://splunk-rest.ops.tiaa-cref.org/services/auth/login"
-SPLUNK_SEARCH_URL = "https://splunk-rest.ops.tiaa-cref.org/services/search/jobs"
+BASE_REST_URL = "https://splunk-rest.ops.tiaa-cref.org/services"
 USERNAME = "kalajo"
 PASSWORD = "Qwer"
-SEARCH_QUERY = "| makeresults count=1"  # Simplest possible valid search
 VERIFY_SSL = False
 # ==============================
+
+# Default basic search if no valid search ID found
+BASIC_SEARCH = "| makeresults count=1 | fields - _*"
 
 # Disable SSL warnings if needed
 if not VERIFY_SSL:
     requests.packages.urllib3.disable_warnings()
 
-# Helper function to print HTTP errors
-def print_error(response, stage):
-    print(f"\n=== ERROR IN {stage} ===")
-    print(f"Status code: {response.status_code}")
-    print("Response headers:")
-    print(response.headers)
-    print("Response content:")
+def get_session_key():
+    """Authenticate and return session key"""
     try:
-        print(ET.dump(ET.fromstring(response.content)))  # Try to parse as XML
-    except:
-        print(response.text[:1000])  # Print first 1000 chars if not XML
+        response = requests.post(
+            SPLUNK_AUTH_URL,
+            data={"username": USERNAME, "password": PASSWORD},
+            verify=VERIFY_SSL
+        )
+        response.raise_for_status()
+        root = ET.fromstring(response.content)
+        return root.find('.//sessionKey').text
+    except Exception as e:
+        print(f"Authentication failed: {str(e)}")
+        exit(1)
 
-# 1. Authentication
-print("Attempting authentication...")
-auth_response = requests.post(
-    SPLUNK_AUTH_URL,
-    data={"username": USERNAME, "password": PASSWORD},
-    verify=VERIFY_SSL
-)
+def try_search_endpoints(session_key):
+    """Attempt different search endpoints with fallback"""
+    endpoints = [
+        f"{BASE_REST_URL}/search/jobs",  # Standard endpoint
+        f"{BASE_REST_URL}NS/{USERNAME}/search/search/jobs"  # Namespaced endpoint
+    ]
+    
+    for endpoint in endpoints:
+        try:
+            response = requests.post(
+                endpoint,
+                headers={
+                    "Authorization": f"Splunk {session_key}",
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                data={"search": BASIC_SEARCH, "output_mode": "csv"},
+                verify=VERIFY_SSL
+            )
+            response.raise_for_status()
+            
+            # Try to parse search ID
+            root = ET.fromstring(response.content)
+            search_id = root.find('.//sid').text
+            print(f"Success using endpoint: {endpoint}")
+            return search_id
+            
+        except Exception as e:
+            print(f"Attempt failed for {endpoint}: {str(e)}")
+            continue
+            
+    return None
 
-if auth_response.status_code != 200:
-    print_error(auth_response, "AUTHENTICATION")
-    exit(1)
+def main():
+    # Get authenticated session
+    session_key = get_session_key()
+    print(f"Obtained session key: {session_key[:15]}...")
 
-try:
-    root = ET.fromstring(auth_response.content)
-    session_key = root.find('.//sessionKey').text
-    print(f"Auth success! Session key: {session_key[:15]}...")
-except Exception as e:
-    print("Failed to parse session key:")
-    print(f"Error: {str(e)}")
-    print("Raw response:")
-    print(auth_response.text)
-    exit(1)
+    # Attempt search creation
+    search_id = try_search_endpoints(session_key)
+    
+    if not search_id:
+        print("\nAll search attempts failed. Potential issues:")
+        print("1. Incorrect REST API endpoints")
+        print("2. Missing search permissions for user")
+        print("3. Network/firewall restrictions")
+        print("4. Invalid session key")
+        exit(1)
+        
+    print(f"\nSearch job created successfully! ID: {search_id}")
+    
+    # Add results retrieval logic here
+    # ...
 
-# 2. Create Search Job
-print("\nCreating search job...")
-headers = {
-    "Authorization": f"Splunk {session_key}",
-    "Content-Type": "application/x-www-form-urlencoded"
-}
-
-search_response = requests.post(
-    SPLUNK_SEARCH_URL,
-    headers=headers,
-    data={"search": SEARCH_QUERY, "output_mode": "json"},
-    verify=VERIFY_SSL
-)
-
-if search_response.status_code not in [200, 201]:
-    print_error(search_response, "SEARCH CREATION")
-    exit(1)
-
-try:
-    job_root = ET.fromstring(search_response.content)
-    search_id = job_root.find('.//sid').text
-    print(f"Search created! SID: {search_id}")
-except Exception as e:
-    print("Failed to parse search ID:")
-    print(f"Error: {str(e)}")
-    print("Raw response:")
-    print(search_response.text)
-    exit(1)
-
-# 3. Get Results (immediate, for testing)
-print("\nFetching results...")
-results_response = requests.get(
-    f"{SPLUNK_SEARCH_URL}/{search_id}/results",
-    headers=headers,
-    params={"output_mode": "json"},
-    verify=VERIFY_SSL
-)
-
-if results_response.status_code == 200:
-    print("Success! Sample results:")
-    print(results_response.json())
-else:
-    print_error(results_response, "RESULTS FETCH")
+if __name__ == "__main__":
+    main()
