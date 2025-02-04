@@ -9,11 +9,15 @@ BASE_REST_URL = "https://splunk-rest.ops.tiaa-cref.org/servicesNS/{username}/sea
 USERNAME = "kalajo"
 PASSWORD = "Qwer"
 VERIFY_SSL = False
-SAFE_SEARCH = "| makeresults count=1"  # Simplest possible valid search
+SEARCH_QUERY = "| makeresults count=1 | eval test_field='success'"  # Guaranteed result
 # ==============================
 
+# Disable SSL warnings if needed
+if not VERIFY_SSL:
+    requests.packages.urllib3.disable_warnings()
+
 def get_session_key():
-    """Authenticate and return session key with validation"""
+    """Authenticate and return session key"""
     try:
         response = requests.post(
             SPLUNK_AUTH_URL,
@@ -21,76 +25,67 @@ def get_session_key():
             verify=VERIFY_SSL
         )
         response.raise_for_status()
-        
-        # Validate XML structure
         root = ET.fromstring(response.content)
-        if (session_key := root.findtext('.//sessionKey')) is None:
-            raise ValueError("Session key not found in authentication response")
-            
-        print(f"Auth success! Session key: {session_key[:15]}...")
-        return session_key
-        
+        return root.find('.//sessionKey').text
     except Exception as e:
         print(f"Authentication failed: {str(e)}")
-        print(f"Auth response content: {response.text if 'response' in locals() else 'No response'}")
         exit(1)
 
 def create_search_job(session_key):
-    """Create search job with validation"""
+    """Create search job with namespace handling"""
+    endpoint = BASE_REST_URL.format(username=USERNAME)
     try:
-        endpoint = BASE_REST_URL.format(username=USERNAME)
         response = requests.post(
             endpoint,
             headers={
                 "Authorization": f"Splunk {session_key}",
                 "Content-Type": "application/x-www-form-urlencoded"
             },
-            data={
-                "search": SAFE_SEARCH,
-                "output_mode": "csv",
-                "adhoc_search_level": "fast"
-            },
+            data={"search": SEARCH_QUERY, "output_mode": "csv"},
             verify=VERIFY_SSL
         )
         response.raise_for_status()
         
-        # Validate search creation response
-        root = ET.fromstring(response.content)
-        if (search_id := root.findtext('.//sid')) is None:
-            raise ValueError("Search ID not found in response")
-            
-        print(f"Search job created successfully. ID: {search_id}")
-        return search_id
+        # Debug: Print raw XML response
+        print("\nSearch creation response XML:")
+        print(response.text)
         
+        root = ET.fromstring(response.content)
+        search_id = root.find('.//sid').text
+        print(f"\nSearch job created! ID: {search_id}")
+        return search_id
     except Exception as e:
         print(f"Search creation failed: {str(e)}")
-        print(f"Endpoint used: {endpoint}")
-        print(f"Response content: {response.text if 'response' in locals() else 'No response'}")
         exit(1)
 
-def get_search_results(session_key, search_id):
-    """Retrieve and save results with validation"""
+def get_results(session_key, search_id):
+    """Get results with proper namespace handling"""
+    namespace = {'ns': 'http://dev.splunk.com/ns/rest'}
+    results_url = f"{BASE_REST_URL.format(username=USERNAME)}/{search_id}/results"
+    
     try:
-        results_url = f"{BASE_REST_URL.format(username=USERNAME)}/{search_id}/results"
-        
-        # Wait for completion
+        # Wait for completion with timeout
         start_time = time.time()
-        while time.time() - start_time < 30:  # 30s timeout
+        while time.time() - start_time < 30:
             status_response = requests.get(
                 f"{BASE_REST_URL.format(username=USERNAME)}/{search_id}",
                 headers={"Authorization": f"Splunk {session_key}"},
                 verify=VERIFY_SSL
             )
-            status_response.raise_for_status()
+            root = ET.fromstring(status_response.content)
             
-            status_root = ET.fromstring(status_response.content)
-            if status_root.findtext('.//s:key[@name="isDone"]', {'s': 'http://dev.splunk.com/ns/rest'}) == "1":
+            # Using explicit namespace
+            is_done = root.find('.//ns:key[@name="isDone"]', namespace)
+            
+            if is_done is not None and is_done.text == "1":
+                print("\nSearch completed successfully!")
                 break
+            print("Waiting for search completion...")
             time.sleep(2)
         else:
             raise TimeoutError("Search timed out after 30 seconds")
 
-        # Get results
+        # Get and display results
         results_response = requests.get(
             results_url,
             headers={"Authorization": f"Splunk {session_key}"},
@@ -99,25 +94,27 @@ def get_search_results(session_key, search_id):
         )
         results_response.raise_for_status()
         
+        print("\nRaw results:")
+        print(results_response.text)
+        
         # Save to file
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"splunk_results_{timestamp}.csv"
         with open(filename, 'w') as f:
             f.write(results_response.text)
             
-        print(f"Results saved to {filename}")
-        return True
+        print(f"\nResults saved to {filename}")
         
     except Exception as e:
-        print(f"Results retrieval failed: {str(e)}")
+        print(f"\nResults retrieval failed: {str(e)}")
         exit(1)
 
 if __name__ == "__main__":
-    # 1. Authentication
+    print("1. Authenticating...")
     session_key = get_session_key()
     
-    # 2. Search job creation
+    print("\n2. Creating search job...")
     search_id = create_search_job(session_key)
     
-    # 3. Results handling
-    get_search_results(session_key, search_id)
+    print("\n3. Retrieving results...")
+    get_results(session_key, search_id)
